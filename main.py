@@ -23,7 +23,7 @@ USER_MENTION_CONFIG = {
 
 # --- CONFIGURATION FOR WELCOME MESSAGE ---
 WELCOME_CONFIG = {
-    "channel_id": None, # ❗ PASTE YOUR WELCOME CHANNEL ID HERE
+    "channel_id": 1398556295916818526, # ❗ PASTE YOUR WELCOME CHANNEL ID HERE
     "welcome_description": "Your custom welcome message will go here!" # ❗ PASTE YOUR WELCOME DESCRIPTION HERE
 }
 
