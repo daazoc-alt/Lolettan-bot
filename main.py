@@ -24,7 +24,18 @@ USER_MENTION_CONFIG = {
 # --- CONFIGURATION FOR WELCOME MESSAGE ---
 WELCOME_CONFIG = {
     "channel_id": 1398556295916818526, # ❗ PASTE YOUR WELCOME CHANNEL ID HERE
-    "welcome_description": "Your custom welcome message will go here!" # ❗ PASTE YOUR WELCOME DESCRIPTION HERE
+    "welcome_description": """**✅ GET VERIFIED: 🔒**
+https://discord.com/channels/1398556295438794773/1398649721521967145
+
+**📜 SERVER RULES: **🔗https://discordapp.com/channels/1398556295438794773/1398939894038003782
+
+**🔗 INVITE LINK:**
+➡️ https://discord.com/channels/1398556295438794773/1398655859747459102
+
+**💬 CHAT ZONE:**
+🗨️ https://discord.com/channels/1398556295438794773/1398556296046837810
+
+**♠️ Let the cards fall where they may — welcome to the game!**""" # ❗ PASTE YOUR WELCOME DESCRIPTION HERE
 }
 
 
