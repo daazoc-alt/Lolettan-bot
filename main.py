@@ -1,4 +1,3 @@
-# main.py
 import discord
 from discord.ext import commands
 import os
@@ -15,10 +14,17 @@ REACTION_CONFIG = {
     "role_id": 1398556295438794776,
     "dm_message": "✅ You’re verified! 👋 We’re glad to have you 🃏 Let’s deal some cards ♠️ Have fun 🎉💵 | 📜 Don’t forget to read the rules!"
 }
+
 # --- CONFIGURATION FOR USER MENTION REPLY ---
 USER_MENTION_CONFIG = {
     "user_id": 1244962723872247818, # ❗ MAKE SURE YOUR ACTUAL USER ID IS PASTED HERE
-    "reply_message": "👀 You mentioned my DEV — he’ll be with you shortly."
+    "reply_message": "👀 You mentioned my DEV — he'll be with you shortly."
+}
+
+# --- CONFIGURATION FOR WELCOME MESSAGE ---
+WELCOME_CONFIG = {
+    "channel_id": None, # ❗ PASTE YOUR WELCOME CHANNEL ID HERE
+    "welcome_description": "Your custom welcome message will go here!" # ❗ PASTE YOUR WELCOME DESCRIPTION HERE
 }
 
 
@@ -84,7 +90,37 @@ async def on_raw_reaction_remove(payload):
             print(f"Removed role '{role.name}' from {member.name}")
 
 
-# --- Feature 2: Voice Channel Moderation ---
+# --- Feature 2: Welcome Message ---
+@bot.event
+async def on_member_join(member):
+    """Sends a welcome message when a new member joins the server."""
+    # Check if welcome message is configured
+    if not WELCOME_CONFIG["channel_id"]:
+        print("Welcome message not configured - no channel ID set")
+        return
+
+    # Get the configured welcome channel
+    welcome_channel = bot.get_channel(WELCOME_CONFIG["channel_id"])
+
+    if welcome_channel:
+        welcome_message = f"""🎉 **Welcome to {member.guild.name}!** 🎉
+
+Hey {member.mention}! 👋
+
+{WELCOME_CONFIG["welcome_description"]}
+
+Welcome aboard, {member.display_name}! 🌟"""
+
+        try:
+            await welcome_channel.send(welcome_message)
+            print(f"Sent welcome message for {member.name}")
+        except Exception as e:
+            print(f"Could not send welcome message: {e}")
+    else:
+        print(f"Welcome channel with ID {WELCOME_CONFIG['channel_id']} not found")
+
+
+# --- Feature 3: Voice Channel Moderation ---
 @bot.command()
 @commands.has_permissions(move_members=True)
 async def movevc(ctx, member: discord.Member, channel: discord.VoiceChannel):
@@ -104,7 +140,7 @@ async def movevc_error(ctx, error):
         await ctx.send("Usage: `&movevc @User #voice-channel-name`")
 
 
-# --- Feature 3: Reply on Role Mention ---
+# --- Feature 4: Reply on Role Mention ---
 @bot.event
 async def on_message(message):
     """Processes messages for user mentions and commands."""
