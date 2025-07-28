@@ -12,7 +12,16 @@ REACTION_CONFIG = {
     "message_id": 1399030796223909920,
     "emoji": "♠️",
     "role_id": 1398556295438794776,
-    "dm_message": "✅ You’re verified! 👋 We’re glad to have you 🃏 Let’s deal some cards ♠️ Have fun 🎉💵 | 📜 Don’t forget to read the rules!"
+    "dm_message": """**✨ HEY You are verified ✅
+Welcome to ♠️ ʙʟᴀᴄᴋ ᴊᴀᴄᴋ ♠️**
+•
+**📜 SERVER RULES:** 🔗https://discordapp.com/channels/1398556295438794773/1398939894038003782
+•
+**🔗 INVITE LINK:** ➡️ https://discord.com/channels/1398556295438794773/1398655859747459102
+•
+**💬 CHAT ZONE:** 🗨️ https://discord.com/channels/1398556295438794773/1398556296046837810
+•
+**👋 We're glad to have you! 🃏 Let's deal some cards ♠️ and have fun! 🎉💵**"""
 }
 
 # --- CONFIGURATION FOR USER MENTION REPLY ---
