@@ -114,7 +114,7 @@ async def log_command(ctx, command_name, details=""):
         if details:
             embed.add_field(name="Details", value=details, inline=False)
         embed.set_footer(text="♠️ BLACK JACK Moderation Logs")
-        
+
         try:
             await log_channel.send(embed=embed)
         except:
@@ -133,7 +133,7 @@ async def on_ready():
 async def on_voice_state_update(member, before, after):
     """Track voice channel joins/leaves for logs."""
     timestamp = datetime.datetime.utcnow()
-    
+
     if before.channel != after.channel:
         if before.channel is None and after.channel is not None:
             # User joined a voice channel
@@ -144,7 +144,7 @@ async def on_voice_state_update(member, before, after):
                 "timestamp": timestamp
             }
             voice_logs.append(log_entry)
-            
+
         elif before.channel is not None and after.channel is None:
             # User left a voice channel
             log_entry = {
@@ -154,7 +154,7 @@ async def on_voice_state_update(member, before, after):
                 "timestamp": timestamp
             }
             voice_logs.append(log_entry)
-            
+
         elif before.channel is not None and after.channel is not None:
             # User moved between channels
             log_entry = {
@@ -165,7 +165,7 @@ async def on_voice_state_update(member, before, after):
                 "timestamp": timestamp
             }
             voice_logs.append(log_entry)
-    
+
     # Keep only last 100 log entries
     if len(voice_logs) > 100:
         voice_logs.pop(0)
@@ -289,7 +289,7 @@ async def vc_mute(ctx, member: discord.Member):
     if not member.voice or not member.voice.channel:
         await ctx.send(f"❌ {member.mention} is not in a voice channel.")
         return
-    
+
     try:
         await member.edit(mute=True)
         await ctx.send(f"🔇 {member.mention} has been muted in voice channel.")
@@ -304,7 +304,7 @@ async def vc_unmute(ctx, member: discord.Member):
     if not member.voice or not member.voice.channel:
         await ctx.send(f"❌ {member.mention} is not in a voice channel.")
         return
-    
+
     try:
         await member.edit(mute=False)
         await ctx.send(f"🔊 {member.mention} has been unmuted in voice channel.")
@@ -319,7 +319,7 @@ async def vc_kick(ctx, member: discord.Member):
     if not member.voice or not member.voice.channel:
         await ctx.send(f"❌ {member.mention} is not in a voice channel.")
         return
-    
+
     channel_name = member.voice.channel.name
     try:
         await member.move_to(None)
@@ -335,7 +335,7 @@ async def vc_lock(ctx):
     if not ctx.author.voice or not ctx.author.voice.channel:
         await ctx.send("❌ You must be in a voice channel to use this command.")
         return
-    
+
     channel = ctx.author.voice.channel
     try:
         await channel.set_permissions(ctx.guild.default_role, connect=False)
@@ -353,7 +353,7 @@ async def vc_unlock(ctx):
     if not ctx.author.voice or not ctx.author.voice.channel:
         await ctx.send("❌ You must be in a voice channel to use this command.")
         return
-    
+
     channel = ctx.author.voice.channel
     try:
         await channel.set_permissions(ctx.guild.default_role, connect=None)
@@ -371,21 +371,21 @@ async def vc_ban(ctx, member: discord.Member):
     if not ctx.author.voice or not ctx.author.voice.channel:
         await ctx.send("❌ You must be in a voice channel to use this command.")
         return
-    
+
     channel = ctx.author.voice.channel
     try:
         # Disconnect user if they're in the channel
         if member.voice and member.voice.channel == channel:
             await member.move_to(None)
-        
+
         # Set permissions to deny connect
         await channel.set_permissions(member, connect=False)
-        
+
         # Track the ban (expires in 1 hour)
         if channel.id not in voice_bans:
             voice_bans[channel.id] = {}
         voice_bans[channel.id][member.id] = datetime.datetime.utcnow() + datetime.timedelta(hours=1)
-        
+
         await ctx.send(f"🚫 {member.mention} has been temporarily banned from **{channel.name}** for 1 hour.")
         await log_command(ctx, "&vc ban", f"Banned {member.mention} from {channel.name}")
     except discord.Forbidden:
@@ -398,7 +398,7 @@ async def vc_move(ctx, member: discord.Member, channel: discord.VoiceChannel):
     if not member.voice or not member.voice.channel:
         await ctx.send(f"❌ {member.mention} is not in a voice channel.")
         return
-    
+
     old_channel = member.voice.channel.name
     try:
         await member.move_to(channel)
@@ -415,17 +415,17 @@ async def voice(ctx, action=None, value=None):
         if not voice_logs:
             await ctx.send("📝 No voice channel activity recorded yet.")
             return
-        
+
         embed = discord.Embed(
             title="🎙️ Voice Channel Logs",
             color=0x0099ff,
             timestamp=datetime.datetime.utcnow()
         )
-        
+
         # Show last 10 entries
         recent_logs = voice_logs[-10:]
         log_text = ""
-        
+
         for log in recent_logs:
             time_str = log['timestamp'].strftime("%H:%M:%S")
             if log['action'] == 'joined':
@@ -434,12 +434,12 @@ async def voice(ctx, action=None, value=None):
                 log_text += f"`{time_str}` ⬅️ {log['user'].mention} left **{log['channel'].name}**\n"
             elif log['action'] == 'moved':
                 log_text += f"`{time_str}` 🔄 {log['user'].mention} moved from **{log['from_channel'].name}** to **{log['to_channel'].name}**\n"
-        
+
         embed.description = log_text if log_text else "No recent activity"
         embed.set_footer(text="♠️ BLACK JACK Voice Logs")
         await ctx.send(embed=embed)
         await log_command(ctx, "&voice logs", "Viewed voice channel logs")
-        
+
     elif action == "settings":
         embed = discord.Embed(
             title="🎙️ Voice Channel Settings",
@@ -451,18 +451,18 @@ async def voice(ctx, action=None, value=None):
         embed.add_field(name="&vc ban @user", value="Temporarily ban user from VC", inline=False)
         embed.set_footer(text="♠️ BLACK JACK Voice Settings")
         await ctx.send(embed=embed)
-        
+
     elif action == "limit" and value:
         if not ctx.author.voice or not ctx.author.voice.channel:
             await ctx.send("❌ You must be in a voice channel to use this command.")
             return
-        
+
         try:
             limit = int(value)
             if limit < 0 or limit > 99:
                 await ctx.send("❌ Voice channel limit must be between 0 and 99.")
                 return
-            
+
             channel = ctx.author.voice.channel
             await channel.edit(user_limit=limit)
             await ctx.send(f"👥 Voice channel **{channel.name}** user limit set to {limit}.")
@@ -553,61 +553,61 @@ class TicketView(discord.ui.View):
         """Creates a new ticket when the button is clicked."""
         guild = interaction.guild
         user = interaction.user
-        
+
         # Get the category for active tickets
         active_category = guild.get_channel(TICKET_CONFIG["active_tickets_category_id"])
         if not active_category:
             await interaction.response.send_message("❌ Ticket system is not properly configured.", ephemeral=True)
             return
-        
+
         # Check if user already has an open ticket
         existing_ticket = discord.utils.find(
             lambda c: c.name == f"ticket-{user.name.lower()}" and c.category_id == TICKET_CONFIG["active_tickets_category_id"],
             guild.channels
         )
-        
+
         if existing_ticket:
             await interaction.response.send_message(f"❌ You already have an open ticket: {existing_ticket.mention}", ephemeral=True)
             return
-        
+
         # Create the ticket channel
         support_role = guild.get_role(TICKET_CONFIG["support_role_id"])
-        
+
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
             user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
             guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
         }
-        
+
         if support_role:
             overwrites[support_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        
+
         try:
             ticket_channel = await guild.create_text_channel(
                 name=f"ticket-{user.name.lower()}",
                 category=active_category,
                 overwrites=overwrites
             )
-            
+
             # Create the close ticket view
             close_view = CloseTicketView()
-            
+
             embed = discord.Embed(
                 title="🎫 Support Ticket Created",
                 description=f"Welcome {user.mention}! \n\n📝 **Please describe your issue or question below.**\n\n🔒 This is a private channel only visible to you and our support team.",
                 color=0x00ff00
             )
             embed.set_footer(text="♠️ BLACK JACK Support Team")
-            
+
             await ticket_channel.send(embed=embed, view=close_view)
-            
+
             # Notify support role if configured
             if support_role:
                 await ticket_channel.send(f"🔔 {support_role.mention} - New support ticket created!")
-            
+
             await interaction.response.send_message(f"✅ Ticket created! Please check {ticket_channel.mention}", ephemeral=True)
             print(f"Created ticket for {user.name}")
-            
+
         except Exception as e:
             await interaction.response.send_message("❌ Failed to create ticket. Please contact an administrator.", ephemeral=True)
             print(f"Failed to create ticket: {e}")
@@ -622,7 +622,7 @@ class CloseTicketView(discord.ui.View):
         """Closes the ticket and moves it to closed category."""
         guild = interaction.guild
         channel = interaction.channel
-        
+
         # Check if user has permission to close (ticket creator or support role)
         support_role = guild.get_role(TICKET_CONFIG["support_role_id"])
         can_close = (
@@ -630,40 +630,40 @@ class CloseTicketView(discord.ui.View):
             (support_role and support_role in interaction.user.roles) or
             interaction.user.guild_permissions.manage_channels
         )
-        
+
         if not can_close:
             await interaction.response.send_message("❌ You don't have permission to close this ticket.", ephemeral=True)
             return
-        
+
         # Get closed tickets category
         closed_category = guild.get_channel(TICKET_CONFIG["closed_tickets_category_id"])
         if not closed_category:
             await interaction.response.send_message("❌ Closed tickets category not configured.", ephemeral=True)
             return
-        
+
         try:
             # Update channel permissions to remove user access
             user_name = channel.name.replace("ticket-", "")
             user = discord.utils.find(lambda m: m.name.lower() == user_name, guild.members)
-            
+
             if user:
                 await channel.set_permissions(user, read_messages=False)
-            
+
             # Move to closed category
             await channel.edit(category=closed_category, name=f"closed-{channel.name}")
-            
+
             embed = discord.Embed(
                 title="🔒 Ticket Closed",
                 description=f"This ticket has been closed by {interaction.user.mention}.\n\n📁 Moved to closed tickets category.",
                 color=0xff0000
             )
             embed.set_footer(text="♠️ BLACK JACK Support Team")
-            
+
             # Remove the close button
             await interaction.response.edit_message(embed=embed, view=None)
-            
+
             print(f"Closed ticket: {channel.name}")
-            
+
         except Exception as e:
             await interaction.response.send_message("❌ Failed to close ticket.", ephemeral=True)
             print(f"Failed to close ticket: {e}")
@@ -677,19 +677,19 @@ async def setup_tickets(ctx):
     if not TICKET_CONFIG["ticket_channel_id"]:
         await ctx.send("❌ Ticket system is not configured. Please set the channel ID in the configuration.")
         return
-    
+
     ticket_channel = bot.get_channel(TICKET_CONFIG["ticket_channel_id"])
     if not ticket_channel:
         await ctx.send("❌ Ticket channel not found. Please check the channel ID in the configuration.")
         return
-    
+
     embed = discord.Embed(
         title="🎫 Support Tickets",
         description=TICKET_CONFIG["ticket_description"],
         color=0x0099ff
     )
     embed.set_footer(text="♠️ BLACK JACK Support System")
-    
+
     view = TicketView()
     await ticket_channel.send(embed=embed, view=view)
     await ctx.send(f"✅ Ticket system set up in {ticket_channel.mention}")
@@ -709,6 +709,7 @@ async def setup_tickets_error(ctx, error):
 async def say_command(ctx, *, message):
     """Bot sends a message and deletes the command."""
     try:
+```python
         await ctx.message.delete()
         await ctx.send(message)
         await log_command(ctx, "&say", f"Message: {message[:100]}...")
@@ -755,7 +756,7 @@ async def poll_command(ctx, *, content):
         if len(parts) != 3:
             await ctx.send("❌ Usage: `&poll [question] | [option1] | [option2]`", delete_after=5)
             return
-        
+
         question, option1, option2 = parts
         embed = discord.Embed(
             title="📊 Poll",
@@ -763,7 +764,7 @@ async def poll_command(ctx, *, content):
             color=0x00ff00
         )
         embed.set_footer(text="♠️ BLACK JACK Poll System")
-        
+
         poll_msg = await ctx.send(embed=embed)
         await poll_msg.add_reaction('🇦')
         await poll_msg.add_reaction('🇧')
@@ -778,7 +779,7 @@ async def warn_command(ctx, member: discord.Member, *, reason):
     try:
         await ctx.message.delete()
         log_channel = bot.get_channel(MODERATION_CONFIG["log_channel_id"])
-        
+
         embed = discord.Embed(
             title="⚠️ User Warning",
             color=0xffaa00,
@@ -788,15 +789,15 @@ async def warn_command(ctx, member: discord.Member, *, reason):
         embed.add_field(name="Moderator", value=ctx.author.mention, inline=True)
         embed.add_field(name="Reason", value=reason, inline=False)
         embed.set_footer(text="♠️ BLACK JACK Moderation")
-        
+
         if log_channel:
             await log_channel.send(embed=embed)
-        
+
         try:
             await member.send(f"⚠️ You have been warned in **{ctx.guild.name}**\n**Reason:** {reason}")
         except:
             pass
-        
+
         await log_command(ctx, "&warn", f"Warned {member.mention} for: {reason}")
     except discord.Forbidden:
         await ctx.send("❌ I don't have permission to delete messages.")
@@ -822,7 +823,7 @@ async def clear_command(ctx, amount: int):
     if amount <= 0 or amount > 100:
         await ctx.send("❌ Please specify a number between 1 and 100.", delete_after=5)
         return
-    
+
     try:
         deleted = await ctx.channel.purge(limit=amount + 1)  # +1 to include the command message
         await ctx.send(f"🧹 Deleted {len(deleted) - 1} messages.", delete_after=3)
@@ -836,7 +837,7 @@ async def mute_command(ctx, member: discord.Member, duration=None, *, reason="No
     """Mutes a user."""
     try:
         await ctx.message.delete()
-        
+
         # Parse duration (simple implementation)
         mute_time = None
         if duration:
@@ -849,10 +850,10 @@ async def mute_command(ctx, member: discord.Member, duration=None, *, reason="No
                     mute_time = datetime.timedelta(days=int(duration[:-1]))
             except:
                 pass
-        
+
         until = datetime.datetime.utcnow() + mute_time if mute_time else None
         await member.timeout(until, reason=reason)
-        
+
         duration_text = f" for {duration}" if duration else ""
         await ctx.send(f"🔇 {member.mention} has been muted{duration_text}.", delete_after=5)
         await log_command(ctx, "&mute", f"Muted {member.mention}{duration_text} for: {reason}")
@@ -971,7 +972,7 @@ class HelpView(discord.ui.View):
             description="**Professional voice channel management tools**",
             color=0x0099ff
         )
-        
+
         embed.add_field(
             name="**Basic Voice Control**",
             value="`&vc mute @user` - Mute user in voice channel\n"
@@ -980,7 +981,7 @@ class HelpView(discord.ui.View):
                   "`&vc move @user #channel` - Move user to another VC",
             inline=False
         )
-        
+
         embed.add_field(
             name="**Channel Management**",
             value="`&vc lock` - Lock your current voice channel\n"
@@ -989,15 +990,15 @@ class HelpView(discord.ui.View):
                   "`&voice limit <number>` - Set VC user limit (0-99)",
             inline=False
         )
-        
+
         embed.add_field(
             name="**Monitoring & Settings**",
             value="`&voice logs` - Show recent VC join/leave activity\n"
                   "`&voice settings` - Configure voice channel options",
             inline=False
         )
-        
-        embed.set_footer(text="🔒 Requires Moderator Role | ♠️ BLACK JACK Moderation")
+
+        embed.set_footer(text="🔒 Requires Low-level or Main Moderator Role | ♠️ BLACK JACK Moderation")
         await interaction.response.edit_message(embed=embed, view=self)
 
     @discord.ui.button(label='⚙️ General Commands', style=discord.ButtonStyle.secondary, custom_id='help_general')
@@ -1007,7 +1008,7 @@ class HelpView(discord.ui.View):
             description="**Complete moderation toolkit for server management**",
             color=0xff9900
         )
-        
+
         embed.add_field(
             name="**Message Commands**",
             value="`&say [message]` - Bot sends message, deletes command\n"
@@ -1016,7 +1017,7 @@ class HelpView(discord.ui.View):
                   "`&poll [question] | [option1] | [option2]` - Create poll",
             inline=False
         )
-        
+
         embed.add_field(
             name="**User Management**",
             value="`&warn @user [reason]` - Warn user with logging\n"
@@ -1025,7 +1026,7 @@ class HelpView(discord.ui.View):
                   "`&mute @user [duration] [reason]` - Mute user",
             inline=False
         )
-        
+
         embed.add_field(
             name="**Moderation Actions**",
             value="`&kick @user [reason]` - Kick user from server\n"
@@ -1034,7 +1035,7 @@ class HelpView(discord.ui.View):
                   "`&lock` / `&unlock` - Lock/unlock channel",
             inline=False
         )
-        
+
         embed.add_field(
             name="**Fun Commands**",
             value="`&shrug [message]` - Add shrug emoji to message\n"
@@ -1042,8 +1043,8 @@ class HelpView(discord.ui.View):
                   "`&spoiler [message]` - Send spoiler-wrapped text",
             inline=False
         )
-        
-        embed.set_footer(text="🔒 Requires Moderator Role | ♠️ BLACK JACK Moderation")
+
+        embed.set_footer(text="🔒 Requires Main Moderator Role | ♠️ BLACK JACK Moderation")
         await interaction.response.edit_message(embed=embed, view=self)
 
     @discord.ui.button(label='🎫 Ticket System', style=discord.ButtonStyle.success, custom_id='help_tickets')
@@ -1053,7 +1054,7 @@ class HelpView(discord.ui.View):
             description="**Professional support ticket management**",
             color=0x00ff00
         )
-        
+
         embed.add_field(
             name="**Ticket Management**",
             value="`&setup_tickets` - Initialize ticket system in configured channel\n"
@@ -1062,7 +1063,7 @@ class HelpView(discord.ui.View):
                   "• 🔒 Close ticket - Closes and archives ticket",
             inline=False
         )
-        
+
         embed.add_field(
             name="**Features**",
             value="• Private ticket channels\n"
@@ -1072,7 +1073,7 @@ class HelpView(discord.ui.View):
                   "• Professional embeds",
             inline=False
         )
-        
+
         embed.add_field(
             name="**Automated Systems**",
             value="• **Reaction Roles** - Auto-role assignment\n"
@@ -1081,7 +1082,7 @@ class HelpView(discord.ui.View):
                   "• **Voice Activity Logging** - Join/leave tracking",
             inline=False
         )
-        
+
         embed.set_footer(text="🔧 Setup required in configuration | ♠️ BLACK JACK Support")
         await interaction.response.edit_message(embed=embed, view=self)
 
@@ -1097,22 +1098,22 @@ async def help_command(ctx):
         description="**Premium Discord Bot for Server Management & Moderation**\n\n🎮 **Select a category below to view detailed commands:**",
         color=0x000000
     )
-    
+
     embed.add_field(
         name="📊 Bot Information",
         value="• **Prefix:** `&`\n• **Version:** 3.0\n• **Features:** Voice, Tickets, Moderation\n• **Uptime:** 24/7",
         inline=False
     )
-    
+
     embed.add_field(
         name="🔒 Access Control",
-        value="Most commands require the **Moderator Role**\nSome features are available to all users",
+        value="• **Voice & Tickets:** Low-level Moderator Role\n• **Advanced Commands:** Main Moderator Role\n• **Help:** Available to everyone",
         inline=False
     )
-    
+
     embed.set_footer(text="♠️ Click the buttons below to explore different command categories")
     embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
-    
+
     view = HelpView()
     await ctx.send(embed=embed, view=view)
 
@@ -1122,7 +1123,7 @@ async def help_command(ctx):
 async def on_ready():
     """Prints a message to the console when the bot is online and adds persistent views."""
     print(f'Bot {bot.user} is online and ready! 🚀')
-    
+
     # Add persistent views
     bot.add_view(TicketView())
     bot.add_view(CloseTicketView())
