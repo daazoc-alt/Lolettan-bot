@@ -47,6 +47,19 @@ https://discord.com/channels/1398556295438794773/1398649721521967145
 **♠️ Let the cards fall where they may — welcome to the game!**""" # ❗ PASTE YOUR WELCOME DESCRIPTION HERE
 }
 
+# --- CONFIGURATION FOR TICKET SYSTEM ---
+TICKET_CONFIG = {
+    "ticket_channel_id": 0, # ❗ PASTE THE CHANNEL ID WHERE THE TICKET MESSAGE WILL BE POSTED
+    "active_tickets_category_id": 0, # ❗ PASTE THE CATEGORY ID WHERE NEW TICKETS WILL BE CREATED
+    "closed_tickets_category_id": 0, # ❗ PASTE THE CATEGORY ID WHERE CLOSED TICKETS WILL BE MOVED
+    "support_role_id": 0, # ❗ PASTE THE ROLE ID THAT CAN ACCESS TICKETS
+    "ticket_description": """🎫 **Open a Ticket**
+Having an issue or a question?
+Click the button below to create a private support ticket.
+
+🔧 TicketTool.xyz - Ticketing without clutter""" # ❗ CUSTOMIZE YOUR TICKET DESCRIPTION
+}
+
 
 # =================================================================================================
 # BOT SETUP (You don't need to change this part)
@@ -185,6 +198,178 @@ async def on_message(message):
     # --- Important: Process Commands ---
     # This line allows the bot to still process commands like &movevc
     await bot.process_commands(message)
+
+
+# =================================================================================================
+# TICKET SYSTEM
+# =================================================================================================
+
+class TicketView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label='📧 Create ticket', style=discord.ButtonStyle.primary, custom_id='create_ticket')
+    async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Creates a new ticket when the button is clicked."""
+        guild = interaction.guild
+        user = interaction.user
+        
+        # Get the category for active tickets
+        active_category = guild.get_channel(TICKET_CONFIG["active_tickets_category_id"])
+        if not active_category:
+            await interaction.response.send_message("❌ Ticket system is not properly configured.", ephemeral=True)
+            return
+        
+        # Check if user already has an open ticket
+        existing_ticket = discord.utils.find(
+            lambda c: c.name == f"ticket-{user.name.lower()}" and c.category_id == TICKET_CONFIG["active_tickets_category_id"],
+            guild.channels
+        )
+        
+        if existing_ticket:
+            await interaction.response.send_message(f"❌ You already have an open ticket: {existing_ticket.mention}", ephemeral=True)
+            return
+        
+        # Create the ticket channel
+        support_role = guild.get_role(TICKET_CONFIG["support_role_id"])
+        
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        }
+        
+        if support_role:
+            overwrites[support_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        
+        try:
+            ticket_channel = await guild.create_text_channel(
+                name=f"ticket-{user.name.lower()}",
+                category=active_category,
+                overwrites=overwrites
+            )
+            
+            # Create the close ticket view
+            close_view = CloseTicketView()
+            
+            embed = discord.Embed(
+                title="🎫 Support Ticket Created",
+                description=f"Welcome {user.mention}! \n\n📝 **Please describe your issue or question below.**\n\n🔒 This is a private channel only visible to you and our support team.",
+                color=0x00ff00
+            )
+            embed.set_footer(text="♠️ BLACK JACK Support Team")
+            
+            await ticket_channel.send(embed=embed, view=close_view)
+            
+            # Notify support role if configured
+            if support_role:
+                await ticket_channel.send(f"🔔 {support_role.mention} - New support ticket created!")
+            
+            await interaction.response.send_message(f"✅ Ticket created! Please check {ticket_channel.mention}", ephemeral=True)
+            print(f"Created ticket for {user.name}")
+            
+        except Exception as e:
+            await interaction.response.send_message("❌ Failed to create ticket. Please contact an administrator.", ephemeral=True)
+            print(f"Failed to create ticket: {e}")
+
+
+class CloseTicketView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label='🔒 Close Ticket', style=discord.ButtonStyle.danger, custom_id='close_ticket')
+    async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Closes the ticket and moves it to closed category."""
+        guild = interaction.guild
+        channel = interaction.channel
+        
+        # Check if user has permission to close (ticket creator or support role)
+        support_role = guild.get_role(TICKET_CONFIG["support_role_id"])
+        can_close = (
+            channel.name == f"ticket-{interaction.user.name.lower()}" or
+            (support_role and support_role in interaction.user.roles) or
+            interaction.user.guild_permissions.manage_channels
+        )
+        
+        if not can_close:
+            await interaction.response.send_message("❌ You don't have permission to close this ticket.", ephemeral=True)
+            return
+        
+        # Get closed tickets category
+        closed_category = guild.get_channel(TICKET_CONFIG["closed_tickets_category_id"])
+        if not closed_category:
+            await interaction.response.send_message("❌ Closed tickets category not configured.", ephemeral=True)
+            return
+        
+        try:
+            # Update channel permissions to remove user access
+            user_name = channel.name.replace("ticket-", "")
+            user = discord.utils.find(lambda m: m.name.lower() == user_name, guild.members)
+            
+            if user:
+                await channel.set_permissions(user, read_messages=False)
+            
+            # Move to closed category
+            await channel.edit(category=closed_category, name=f"closed-{channel.name}")
+            
+            embed = discord.Embed(
+                title="🔒 Ticket Closed",
+                description=f"This ticket has been closed by {interaction.user.mention}.\n\n📁 Moved to closed tickets category.",
+                color=0xff0000
+            )
+            embed.set_footer(text="♠️ BLACK JACK Support Team")
+            
+            # Remove the close button
+            await interaction.response.edit_message(embed=embed, view=None)
+            
+            print(f"Closed ticket: {channel.name}")
+            
+        except Exception as e:
+            await interaction.response.send_message("❌ Failed to close ticket.", ephemeral=True)
+            print(f"Failed to close ticket: {e}")
+
+
+# --- Feature 5: Ticket System Commands ---
+@bot.command()
+@commands.has_permissions(manage_channels=True)
+async def setup_tickets(ctx):
+    """Sets up the ticket system by sending the ticket creation message."""
+    if not TICKET_CONFIG["ticket_channel_id"]:
+        await ctx.send("❌ Ticket system is not configured. Please set the channel ID in the configuration.")
+        return
+    
+    ticket_channel = bot.get_channel(TICKET_CONFIG["ticket_channel_id"])
+    if not ticket_channel:
+        await ctx.send("❌ Ticket channel not found. Please check the channel ID in the configuration.")
+        return
+    
+    embed = discord.Embed(
+        title="🎫 Support Tickets",
+        description=TICKET_CONFIG["ticket_description"],
+        color=0x0099ff
+    )
+    embed.set_footer(text="♠️ BLACK JACK Support System")
+    
+    view = TicketView()
+    await ticket_channel.send(embed=embed, view=view)
+    await ctx.send(f"✅ Ticket system set up in {ticket_channel.mention}")
+
+@setup_tickets.error
+async def setup_tickets_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ You need 'Manage Channels' permission to set up the ticket system.")
+
+
+# Add persistent views when bot starts
+@bot.event
+async def on_ready():
+    """Prints a message to the console when the bot is online and adds persistent views."""
+    print(f'Bot {bot.user} is online and ready! 🚀')
+    
+    # Add persistent views
+    bot.add_view(TicketView())
+    bot.add_view(CloseTicketView())
+    print("Persistent views added for ticket system!")
 
 
 # =================================================================================================
