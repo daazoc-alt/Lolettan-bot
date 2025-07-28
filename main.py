@@ -709,7 +709,6 @@ async def setup_tickets_error(ctx, error):
 async def say_command(ctx, *, message):
     """Bot sends a message and deletes the command."""
     try:
-```python
         await ctx.message.delete()
         await ctx.send(message)
         await log_command(ctx, "&say", f"Message: {message[:100]}...")
@@ -1087,6 +1086,48 @@ class HelpView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
 # =================================================================================================
+# OWNER COMMAND
+# =================================================================================================
+
+@bot.command(name='owner')
+async def owner_command(ctx):
+    """Display detailed information about the bot owner."""
+    embed = discord.Embed(
+        title="👑 Bot Owner Information",
+        description="**Meet the creator behind ♠️ BLACK JACK Bot**",
+        color=0xffd700
+    )
+
+    embed.add_field(
+        name="🎯 Owner Details",
+        value="**Name:** ᴅᴀᴀᴢᴏ | ʀɪᴏ\n**User ID:** `1244962723872247818`\n**Status:** 🟢 Active Developer",
+        inline=True
+    )
+
+    embed.add_field(
+        name="🚀 About the Developer",
+        value="• **🎮 Gaming Enthusiast** - Passionate about Discord communities\n• **⚡ Bot Developer** - Creating premium Discord solutions\n• **🃏 Casino Theme Expert** - Specializing in gaming servers\n• **24/7 Support** - Dedicated to bot maintenance",
+        inline=False
+    )
+
+    embed.add_field(
+        name="🛠️ Bot Features Created",
+        value="• **🎫 Advanced Ticket System** - Professional support management\n• **🎙️ Voice Moderation** - Complete VC control\n• **⚙️ Moderation Suite** - 15+ admin commands\n• **🤖 Automation** - Reaction roles, welcome messages",
+        inline=False
+    )
+
+    embed.add_field(
+        name="📞 Get in Touch",
+        value="• **Direct Contact:** <@1244962723872247818>\n• **Server Support:** Use ticket system\n• **Development Requests:** Contact owner directly",
+        inline=False
+    )
+
+    embed.set_footer(text="♠️ BLACK JACK Bot - Crafted with ❤️ by ᴅᴀᴀᴢᴏ | ʀɪᴏ")
+    embed.set_thumbnail(url="https://cdn.discordapp.com/emojis/1234567890123456789.png")  # You can replace with actual owner avatar
+
+    await ctx.send(embed=embed)
+
+# =================================================================================================
 # HELP COMMAND
 # =================================================================================================
 
@@ -1102,7 +1143,13 @@ async def help_command(ctx):
     embed.add_field(
         name="📊 Bot Information",
         value="• **Prefix:** `&`\n• **Version:** 3.0\n• **Features:** Voice, Tickets, Moderation\n• **Uptime:** 24/7",
-        inline=False
+        inline=True
+    )
+
+    embed.add_field(
+        name="👑 Bot Owner",
+        value="• **Owner:** ᴅᴀᴀᴢᴏ | ʀɪᴏ\n• **Developer:** Professional Discord Bot Creator\n• **Contact:** <@1244962723872247818>\n• **Status:** 🟢 Active",
+        inline=True
     )
 
     embed.add_field(
