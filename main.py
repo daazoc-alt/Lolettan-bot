@@ -703,7 +703,8 @@ async def setup_tickets(ctx):
     await ctx.send(f"✅ Ticket system set up in {ticket_channel.mention}")
 
 @setup_tickets.error
-async def setup_tickets_error(ctx, error):
+async def setup_tickets_error(ctx,```python
+ error):
     if isinstance(error, commands.MissingPermissions):
         await ctx.send("❌ You need 'Manage Channels' permission to set up the ticket system.")
 
@@ -959,21 +960,21 @@ async def nuke_command(ctx):
         description=f"**You are about to delete ALL messages in {ctx.channel.mention}**\n\n🚨 **THIS ACTION CANNOT BE UNDONE!**\n\nType `CONFIRM NUKE` to proceed or wait 30 seconds to cancel.",
         color=0xff0000
     )
-    
+
     warning_msg = await ctx.send(embed=embed)
-    
+
     def check(m):
         return m.author == ctx.author and m.channel == ctx.channel and m.content == "CONFIRM NUKE"
-    
+
     try:
         await bot.wait_for('message', check=check, timeout=30.0)
-        
+
         # Delete the confirmation message and warning
         try:
             await warning_msg.delete()
         except:
             pass
-            
+
         # Start nuking
         try:
             deleted_count = 0
@@ -982,7 +983,7 @@ async def nuke_command(ctx):
                 deleted_count += 1
                 # Add small delay to avoid rate limits
                 await asyncio.sleep(0.1)
-            
+
             # Send completion message
             embed = discord.Embed(
                 title="💥 Channel Nuked Successfully",
@@ -991,14 +992,14 @@ async def nuke_command(ctx):
             )
             embed.set_footer(text="♠️ BLACK JACK Moderation")
             await ctx.send(embed=embed, delete_after=10)
-            
+
             await log_command(ctx, "&nuke", f"Nuked channel {ctx.channel.mention} - {deleted_count} messages deleted")
-            
+
         except discord.Forbidden:
             await ctx.send("❌ I don't have permission to delete messages in this channel.", delete_after=10)
         except Exception as e:
             await ctx.send(f"❌ An error occurred while nuking the channel: {str(e)}", delete_after=10)
-            
+
     except asyncio.TimeoutError:
         embed = discord.Embed(
             title="🕐 Nuke Cancelled",
@@ -1222,9 +1223,16 @@ async def help_command(ctx):
         inline=True
     )
 
+    
     embed.add_field(
-        name="🔒 Access Control",
-        value="• **Voice & Tickets:** Low-level Moderator Role\n• **Advanced Commands:** Main Moderator Role\n• **Nuke Command:** Main Moderator Role Only\n• **Help:** Available to everyone",
+        name="🔒 Access Control", 
+        value="• **Voice, Tickets & Casino:** Low-level Moderator Role\n• **Advanced Commands:** Main Moderator Role\n• **Nuke & Balance Reset:** Main Moderator Role Only\n• **Help:** Available to everyone",
+        inline=False
+    )
+
+    embed.add_field(
+        name="🎰 Casino Features",
+        value="• **&casino** - Open casino interface\n• **&balance [@user]** - Check casino balance\n• **&resetbalance @user [amount]** - Reset balance (Main Mod)\n• **Interactive Sessions** - Win/loss tracking with statistics",
         inline=False
     )
 
