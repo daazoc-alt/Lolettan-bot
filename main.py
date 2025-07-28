@@ -9,7 +9,7 @@ from keep_alive import keep_alive
 
 # --- CONFIGURATION FOR REACTION ROLES ---
 REACTION_CONFIG = {
-    "message_id": 1399030796223909920,
+    "message_id": 1399387118408564818,
     "emoji": "♠️",
     "role_id": 1398556295438794776,
     "dm_message": """**✨ HEY You are verified ✅
