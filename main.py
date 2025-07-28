@@ -95,6 +95,14 @@ import asyncio
 def has_moderator_role():
     """Decorator to check if user has moderator role."""
     def predicate(ctx):
+        main_moderator_role = ctx.guild.get_role(MODERATION_CONFIG["moderator_role_id"])
+        support_role = ctx.guild.get_role(TICKET_CONFIG["support_role_id"])
+        return main_moderator_role in ctx.author.roles or support_role in ctx.author.roles
+    return commands.check(predicate)
+
+def has_main_moderator_role():
+    """Decorator to check if user has main moderator role only."""
+    def predicate(ctx):
         moderator_role = ctx.guild.get_role(MODERATION_CONFIG["moderator_role_id"])
         return moderator_role in ctx.author.roles
     return commands.check(predicate)
@@ -705,7 +713,7 @@ async def setup_tickets_error(ctx, error):
 # =================================================================================================
 
 @bot.command(name='say')
-@has_moderator_role()
+@has_main_moderator_role()
 async def say_command(ctx, *, message):
     """Bot sends a message and deletes the command."""
     try:
@@ -716,7 +724,7 @@ async def say_command(ctx, *, message):
         await ctx.send("❌ I don't have permission to delete messages.")
 
 @bot.command(name='embed')
-@has_moderator_role()
+@has_main_moderator_role()
 async def embed_command(ctx, *, message):
     """Bot sends an embedded message and deletes the command."""
     try:
@@ -729,7 +737,7 @@ async def embed_command(ctx, *, message):
         await ctx.send("❌ I don't have permission to delete messages.")
 
 @bot.command(name='announce')
-@has_moderator_role()
+@has_main_moderator_role()
 async def announce_command(ctx, channel: discord.TextChannel, *, message):
     """Sends an announcement message in the mentioned channel."""
     try:
@@ -746,7 +754,7 @@ async def announce_command(ctx, channel: discord.TextChannel, *, message):
         await ctx.send("❌ I don't have permission to send messages in that channel or delete this message.")
 
 @bot.command(name='poll')
-@has_moderator_role()
+@has_main_moderator_role()
 async def poll_command(ctx, *, content):
     """Creates a poll with reactions."""
     try:
@@ -772,7 +780,7 @@ async def poll_command(ctx, *, content):
         await ctx.send("❌ I don't have permission to delete messages or add reactions.")
 
 @bot.command(name='warn')
-@has_moderator_role()
+@has_main_moderator_role()
 async def warn_command(ctx, member: discord.Member, *, reason):
     """Warns a user and logs it."""
     try:
@@ -802,7 +810,7 @@ async def warn_command(ctx, member: discord.Member, *, reason):
         await ctx.send("❌ I don't have permission to delete messages.")
 
 @bot.command(name='dm')
-@has_moderator_role()
+@has_main_moderator_role()
 async def dm_command(ctx, member: discord.Member, *, message):
     """Sends a DM to a user."""
     try:
@@ -816,7 +824,7 @@ async def dm_command(ctx, member: discord.Member, *, message):
         await ctx.send("❌ I don't have permission to delete messages.")
 
 @bot.command(name='clear')
-@has_moderator_role()
+@has_main_moderator_role()
 async def clear_command(ctx, amount: int):
     """Deletes a specified number of messages."""
     if amount <= 0 or amount > 100:
@@ -831,7 +839,7 @@ async def clear_command(ctx, amount: int):
         await ctx.send("❌ I don't have permission to delete messages.")
 
 @bot.command(name='mute')
-@has_moderator_role()
+@has_main_moderator_role()
 async def mute_command(ctx, member: discord.Member, duration=None, *, reason="No reason provided"):
     """Mutes a user."""
     try:
@@ -860,7 +868,7 @@ async def mute_command(ctx, member: discord.Member, duration=None, *, reason="No
         await ctx.send("❌ I don't have permission to mute this user or delete messages.")
 
 @bot.command(name='kick')
-@has_moderator_role()
+@has_main_moderator_role()
 async def kick_command(ctx, member: discord.Member, *, reason="No reason provided"):
     """Kicks a member from the server."""
     try:
@@ -872,7 +880,7 @@ async def kick_command(ctx, member: discord.Member, *, reason="No reason provide
         await ctx.send("❌ I don't have permission to kick this user or delete messages.")
 
 @bot.command(name='ban')
-@has_moderator_role()
+@has_main_moderator_role()
 async def ban_command(ctx, member: discord.Member, *, reason="No reason provided"):
     """Bans a user from the server."""
     try:
@@ -884,7 +892,7 @@ async def ban_command(ctx, member: discord.Member, *, reason="No reason provided
         await ctx.send("❌ I don't have permission to ban this user or delete messages.")
 
 @bot.command(name='lock')
-@has_moderator_role()
+@has_main_moderator_role()
 async def lock_command(ctx):
     """Locks the current channel."""
     try:
@@ -896,7 +904,7 @@ async def lock_command(ctx):
         await ctx.send("❌ I don't have permission to modify this channel or delete messages.")
 
 @bot.command(name='unlock')
-@has_moderator_role()
+@has_main_moderator_role()
 async def unlock_command(ctx):
     """Unlocks the current channel."""
     try:
@@ -908,7 +916,7 @@ async def unlock_command(ctx):
         await ctx.send("❌ I don't have permission to modify this channel or delete messages.")
 
 @bot.command(name='shrug')
-@has_moderator_role()
+@has_main_moderator_role()
 async def shrug_command(ctx, *, message):
     """Bot sends a message with shrug emoji."""
     try:
@@ -919,7 +927,7 @@ async def shrug_command(ctx, *, message):
         await ctx.send("❌ I don't have permission to delete messages.")
 
 @bot.command(name='reverse')
-@has_moderator_role()
+@has_main_moderator_role()
 async def reverse_command(ctx, *, message):
     """Bot replies with reversed text."""
     try:
@@ -931,7 +939,7 @@ async def reverse_command(ctx, *, message):
         await ctx.send("❌ I don't have permission to delete messages.")
 
 @bot.command(name='spoiler')
-@has_moderator_role()
+@has_main_moderator_role()
 async def spoiler_command(ctx, *, message):
     """Bot sends message wrapped in spoiler formatting."""
     try:
@@ -941,8 +949,69 @@ async def spoiler_command(ctx, *, message):
     except discord.Forbidden:
         await ctx.send("❌ I don't have permission to delete messages.")
 
+@bot.command(name='nuke')
+@has_main_moderator_role()
+async def nuke_command(ctx):
+    """Deletes ALL messages in the current channel - DANGEROUS COMMAND."""
+    # Add confirmation step for safety
+    embed = discord.Embed(
+        title="⚠️ CHANNEL NUKE WARNING",
+        description=f"**You are about to delete ALL messages in {ctx.channel.mention}**\n\n🚨 **THIS ACTION CANNOT BE UNDONE!**\n\nType `CONFIRM NUKE` to proceed or wait 30 seconds to cancel.",
+        color=0xff0000
+    )
+    
+    warning_msg = await ctx.send(embed=embed)
+    
+    def check(m):
+        return m.author == ctx.author and m.channel == ctx.channel and m.content == "CONFIRM NUKE"
+    
+    try:
+        await bot.wait_for('message', check=check, timeout=30.0)
+        
+        # Delete the confirmation message and warning
+        try:
+            await warning_msg.delete()
+        except:
+            pass
+            
+        # Start nuking
+        try:
+            deleted_count = 0
+            async for message in ctx.channel.history(limit=None):
+                await message.delete()
+                deleted_count += 1
+                # Add small delay to avoid rate limits
+                await asyncio.sleep(0.1)
+            
+            # Send completion message
+            embed = discord.Embed(
+                title="💥 Channel Nuked Successfully",
+                description=f"**{deleted_count}** messages have been deleted from this channel.",
+                color=0x00ff00
+            )
+            embed.set_footer(text="♠️ BLACK JACK Moderation")
+            await ctx.send(embed=embed, delete_after=10)
+            
+            await log_command(ctx, "&nuke", f"Nuked channel {ctx.channel.mention} - {deleted_count} messages deleted")
+            
+        except discord.Forbidden:
+            await ctx.send("❌ I don't have permission to delete messages in this channel.", delete_after=10)
+        except Exception as e:
+            await ctx.send(f"❌ An error occurred while nuking the channel: {str(e)}", delete_after=10)
+            
+    except asyncio.TimeoutError:
+        embed = discord.Embed(
+            title="🕐 Nuke Cancelled",
+            description="Channel nuke operation was cancelled due to timeout.",
+            color=0x999999
+        )
+        try:
+            await warning_msg.edit(embed=embed, delete_after=5)
+        except:
+            await ctx.send(embed=embed, delete_after=5)
+
 # Error handlers for new commands
-for command_name in ['say', 'embed', 'announce', 'poll', 'warn', 'dm', 'clear', 'mute', 'kick', 'ban', 'lock', 'unlock', 'shrug', 'reverse', 'spoiler']:
+for command_name in ['say', 'embed', 'announce', 'poll', 'warn', 'dm', 'clear', 'mute', 'kick', 'ban', 'lock', 'unlock', 'shrug', 'reverse', 'spoiler', 'nuke']:
     command = bot.get_command(command_name)
     if command:
         @command.error
@@ -997,7 +1066,7 @@ class HelpView(discord.ui.View):
             inline=False
         )
 
-        embed.set_footer(text="🔒 Requires Low-level or Main Moderator Role | ♠️ BLACK JACK Moderation")
+        embed.set_footer(text="🔒 Voice Commands: Low-level or Main Moderator Role | ♠️ BLACK JACK Moderation")
         await interaction.response.edit_message(embed=embed, view=self)
 
     @discord.ui.button(label='⚙️ General Commands', style=discord.ButtonStyle.secondary, custom_id='help_general')
@@ -1031,6 +1100,7 @@ class HelpView(discord.ui.View):
             value="`&kick @user [reason]` - Kick user from server\n"
                   "`&ban @user [reason]` - Ban user from server\n"
                   "`&clear [number]` - Delete messages (1-100)\n"
+                  "`&nuke` - Delete ALL messages in channel ⚠️\n"
                   "`&lock` / `&unlock` - Lock/unlock channel",
             inline=False
         )
@@ -1154,7 +1224,7 @@ async def help_command(ctx):
 
     embed.add_field(
         name="🔒 Access Control",
-        value="• **Voice & Tickets:** Low-level Moderator Role\n• **Advanced Commands:** Main Moderator Role\n• **Help:** Available to everyone",
+        value="• **Voice & Tickets:** Low-level Moderator Role\n• **Advanced Commands:** Main Moderator Role\n• **Nuke Command:** Main Moderator Role Only\n• **Help:** Available to everyone",
         inline=False
     )
 
