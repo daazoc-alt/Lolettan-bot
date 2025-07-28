@@ -60,7 +60,7 @@ TICKET_CONFIG = {
 
 # --- CONFIGURATION FOR MODERATION SYSTEM ---
 MODERATION_CONFIG = {
-    "moderator_role_id": 1398867140681138267, # Role that can use moderation commands
+    "moderator_role_id": 1399360589465391187, # Role that can use moderation commands
     "log_channel_id": 1399357783094202388, # Channel where command logs are sent
 }
 
@@ -701,47 +701,271 @@ async def setup_tickets_error(ctx, error):
 
 
 # =================================================================================================
-# HELP COMMAND
+# ADDITIONAL MODERATION COMMANDS
 # =================================================================================================
 
-@bot.command(name='help')
-async def help_command(ctx, category=None):
-    """Professional help command showing all bot features."""
-    if category is None:
+@bot.command(name='say')
+@has_moderator_role()
+async def say_command(ctx, *, message):
+    """Bot sends a message and deletes the command."""
+    try:
+        await ctx.message.delete()
+        await ctx.send(message)
+        await log_command(ctx, "&say", f"Message: {message[:100]}...")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to delete messages.")
+
+@bot.command(name='embed')
+@has_moderator_role()
+async def embed_command(ctx, *, message):
+    """Bot sends an embedded message and deletes the command."""
+    try:
+        await ctx.message.delete()
+        embed = discord.Embed(description=message, color=0x0099ff)
+        embed.set_footer(text="♠️ BLACK JACK")
+        await ctx.send(embed=embed)
+        await log_command(ctx, "&embed", f"Embedded message: {message[:100]}...")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to delete messages.")
+
+@bot.command(name='announce')
+@has_moderator_role()
+async def announce_command(ctx, channel: discord.TextChannel, *, message):
+    """Sends an announcement message in the mentioned channel."""
+    try:
+        await ctx.message.delete()
         embed = discord.Embed(
-            title="♠️ BLACK JACK BOT - Command Help",
-            description="**Premium Discord Bot for Server Management & Moderation**",
-            color=0x000000
+            title="📢 Announcement",
+            description=message,
+            color=0xff6600
         )
+        embed.set_footer(text="♠️ BLACK JACK Announcement")
+        await channel.send(embed=embed)
+        await log_command(ctx, "&announce", f"Announced in {channel.mention}: {message[:100]}...")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to send messages in that channel or delete this message.")
+
+@bot.command(name='poll')
+@has_moderator_role()
+async def poll_command(ctx, *, content):
+    """Creates a poll with reactions."""
+    try:
+        await ctx.message.delete()
+        parts = content.split(' | ')
+        if len(parts) != 3:
+            await ctx.send("❌ Usage: `&poll [question] | [option1] | [option2]`", delete_after=5)
+            return
         
-        embed.add_field(
-            name="🎙️ Voice Moderation",
-            value="`&help voice` - Voice channel management commands",
-            inline=False
+        question, option1, option2 = parts
+        embed = discord.Embed(
+            title="📊 Poll",
+            description=f"**{question}**\n\n🇦 {option1}\n🇧 {option2}",
+            color=0x00ff00
         )
+        embed.set_footer(text="♠️ BLACK JACK Poll System")
         
-        embed.add_field(
-            name="🎫 Ticket System",
-            value="`&help tickets` - Support ticket system commands",
-            inline=False
+        poll_msg = await ctx.send(embed=embed)
+        await poll_msg.add_reaction('🇦')
+        await poll_msg.add_reaction('🇧')
+        await log_command(ctx, "&poll", f"Created poll: {question}")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to delete messages or add reactions.")
+
+@bot.command(name='warn')
+@has_moderator_role()
+async def warn_command(ctx, member: discord.Member, *, reason):
+    """Warns a user and logs it."""
+    try:
+        await ctx.message.delete()
+        log_channel = bot.get_channel(MODERATION_CONFIG["log_channel_id"])
+        
+        embed = discord.Embed(
+            title="⚠️ User Warning",
+            color=0xffaa00,
+            timestamp=datetime.datetime.utcnow()
         )
+        embed.add_field(name="User", value=member.mention, inline=True)
+        embed.add_field(name="Moderator", value=ctx.author.mention, inline=True)
+        embed.add_field(name="Reason", value=reason, inline=False)
+        embed.set_footer(text="♠️ BLACK JACK Moderation")
         
-        embed.add_field(
-            name="⚙️ General Commands",
-            value="`&help general` - Basic bot commands and utilities",
-            inline=False
-        )
+        if log_channel:
+            await log_channel.send(embed=embed)
         
-        embed.add_field(
-            name="📊 Information",
-            value="• **Prefix:** `&`\n• **Version:** 2.0\n• **Uptime:** 24/7",
-            inline=False
-        )
+        try:
+            await member.send(f"⚠️ You have been warned in **{ctx.guild.name}**\n**Reason:** {reason}")
+        except:
+            pass
         
-        embed.set_footer(text="♠️ Use &help [category] for detailed command information")
-        embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
+        await log_command(ctx, "&warn", f"Warned {member.mention} for: {reason}")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to delete messages.")
+
+@bot.command(name='dm')
+@has_moderator_role()
+async def dm_command(ctx, member: discord.Member, *, message):
+    """Sends a DM to a user."""
+    try:
+        await ctx.message.delete()
+        try:
+            await member.send(f"📩 **Message from {ctx.guild.name}:**\n{message}")
+            await log_command(ctx, "&dm", f"Sent DM to {member.mention}: {message[:100]}...")
+        except discord.Forbidden:
+            await ctx.send(f"❌ Could not send DM to {member.mention}. They may have DMs disabled.", delete_after=5)
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to delete messages.")
+
+@bot.command(name='clear')
+@has_moderator_role()
+async def clear_command(ctx, amount: int):
+    """Deletes a specified number of messages."""
+    if amount <= 0 or amount > 100:
+        await ctx.send("❌ Please specify a number between 1 and 100.", delete_after=5)
+        return
+    
+    try:
+        deleted = await ctx.channel.purge(limit=amount + 1)  # +1 to include the command message
+        await ctx.send(f"🧹 Deleted {len(deleted) - 1} messages.", delete_after=3)
+        await log_command(ctx, "&clear", f"Cleared {len(deleted) - 1} messages")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to delete messages.")
+
+@bot.command(name='mute')
+@has_moderator_role()
+async def mute_command(ctx, member: discord.Member, duration=None, *, reason="No reason provided"):
+    """Mutes a user."""
+    try:
+        await ctx.message.delete()
         
-    elif category.lower() == "voice":
+        # Parse duration (simple implementation)
+        mute_time = None
+        if duration:
+            try:
+                if duration.endswith('m'):
+                    mute_time = datetime.timedelta(minutes=int(duration[:-1]))
+                elif duration.endswith('h'):
+                    mute_time = datetime.timedelta(hours=int(duration[:-1]))
+                elif duration.endswith('d'):
+                    mute_time = datetime.timedelta(days=int(duration[:-1]))
+            except:
+                pass
+        
+        until = datetime.datetime.utcnow() + mute_time if mute_time else None
+        await member.timeout(until, reason=reason)
+        
+        duration_text = f" for {duration}" if duration else ""
+        await ctx.send(f"🔇 {member.mention} has been muted{duration_text}.", delete_after=5)
+        await log_command(ctx, "&mute", f"Muted {member.mention}{duration_text} for: {reason}")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to mute this user or delete messages.")
+
+@bot.command(name='kick')
+@has_moderator_role()
+async def kick_command(ctx, member: discord.Member, *, reason="No reason provided"):
+    """Kicks a member from the server."""
+    try:
+        await ctx.message.delete()
+        await member.kick(reason=reason)
+        await ctx.send(f"👢 {member.mention} has been kicked from the server.", delete_after=5)
+        await log_command(ctx, "&kick", f"Kicked {member.mention} for: {reason}")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to kick this user or delete messages.")
+
+@bot.command(name='ban')
+@has_moderator_role()
+async def ban_command(ctx, member: discord.Member, *, reason="No reason provided"):
+    """Bans a user from the server."""
+    try:
+        await ctx.message.delete()
+        await member.ban(reason=reason)
+        await ctx.send(f"🔨 {member.mention} has been banned from the server.", delete_after=5)
+        await log_command(ctx, "&ban", f"Banned {member.mention} for: {reason}")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to ban this user or delete messages.")
+
+@bot.command(name='lock')
+@has_moderator_role()
+async def lock_command(ctx):
+    """Locks the current channel."""
+    try:
+        await ctx.message.delete()
+        await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=False)
+        await ctx.send("🔒 This channel has been locked.", delete_after=5)
+        await log_command(ctx, "&lock", f"Locked channel {ctx.channel.mention}")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to modify this channel or delete messages.")
+
+@bot.command(name='unlock')
+@has_moderator_role()
+async def unlock_command(ctx):
+    """Unlocks the current channel."""
+    try:
+        await ctx.message.delete()
+        await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=None)
+        await ctx.send("🔓 This channel has been unlocked.", delete_after=5)
+        await log_command(ctx, "&unlock", f"Unlocked channel {ctx.channel.mention}")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to modify this channel or delete messages.")
+
+@bot.command(name='shrug')
+@has_moderator_role()
+async def shrug_command(ctx, *, message):
+    """Bot sends a message with shrug emoji."""
+    try:
+        await ctx.message.delete()
+        await ctx.send(f"{message} ¯\\_(ツ)_/¯")
+        await log_command(ctx, "&shrug", f"Shrug message: {message}")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to delete messages.")
+
+@bot.command(name='reverse')
+@has_moderator_role()
+async def reverse_command(ctx, *, message):
+    """Bot replies with reversed text."""
+    try:
+        await ctx.message.delete()
+        reversed_text = message[::-1]
+        await ctx.send(f"🔄 {reversed_text}")
+        await log_command(ctx, "&reverse", f"Reversed: {message}")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to delete messages.")
+
+@bot.command(name='spoiler')
+@has_moderator_role()
+async def spoiler_command(ctx, *, message):
+    """Bot sends message wrapped in spoiler formatting."""
+    try:
+        await ctx.message.delete()
+        await ctx.send(f"||{message}||")
+        await log_command(ctx, "&spoiler", f"Spoiler message: {message[:50]}...")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to delete messages.")
+
+# Error handlers for new commands
+for command_name in ['say', 'embed', 'announce', 'poll', 'warn', 'dm', 'clear', 'mute', 'kick', 'ban', 'lock', 'unlock', 'shrug', 'reverse', 'spoiler']:
+    command = bot.get_command(command_name)
+    if command:
+        @command.error
+        async def command_error(ctx, error):
+            if isinstance(error, commands.CheckFailure):
+                await ctx.send("❌ You don't have permission to use this command.", delete_after=5)
+            elif isinstance(error, commands.MissingRequiredArgument):
+                await ctx.send(f"❌ Missing required argument. Use `&help` for command usage.", delete_after=5)
+            elif isinstance(error, commands.MemberNotFound):
+                await ctx.send("❌ User not found. Please mention a valid user.", delete_after=5)
+            elif isinstance(error, commands.ChannelNotFound):
+                await ctx.send("❌ Channel not found. Please mention a valid channel.", delete_after=5)
+
+# =================================================================================================
+# INTERACTIVE HELP PANEL SYSTEM
+# =================================================================================================
+
+class HelpView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=300)
+
+    @discord.ui.button(label='🎙️ Voice Commands', style=discord.ButtonStyle.primary, custom_id='help_voice')
+    async def help_voice(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(
             title="🎙️ Voice Channel Moderation Commands",
             description="**Professional voice channel management tools**",
@@ -773,15 +997,57 @@ async def help_command(ctx, category=None):
             inline=False
         )
         
+        embed.set_footer(text="🔒 Requires Moderator Role | ♠️ BLACK JACK Moderation")
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label='⚙️ General Commands', style=discord.ButtonStyle.secondary, custom_id='help_general')
+    async def help_general(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="⚙️ General Moderation Commands",
+            description="**Complete moderation toolkit for server management**",
+            color=0xff9900
+        )
+        
+        embed.add_field(
+            name="**Message Commands**",
+            value="`&say [message]` - Bot sends message, deletes command\n"
+                  "`&embed [message]` - Send embedded message\n"
+                  "`&announce #channel [message]` - Send announcement\n"
+                  "`&poll [question] | [option1] | [option2]` - Create poll",
+            inline=False
+        )
+        
         embed.add_field(
             name="**User Management**",
-            value="`&nick @user [new_name]` - Change user's nickname",
+            value="`&warn @user [reason]` - Warn user with logging\n"
+                  "`&dm @user [message]` - Send DM to user\n"
+                  "`&nick @user [new_name]` - Change user nickname\n"
+                  "`&mute @user [duration] [reason]` - Mute user",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="**Moderation Actions**",
+            value="`&kick @user [reason]` - Kick user from server\n"
+                  "`&ban @user [reason]` - Ban user from server\n"
+                  "`&clear [number]` - Delete messages (1-100)\n"
+                  "`&lock` / `&unlock` - Lock/unlock channel",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="**Fun Commands**",
+            value="`&shrug [message]` - Add shrug emoji to message\n"
+                  "`&reverse [message]` - Send reversed text\n"
+                  "`&spoiler [message]` - Send spoiler-wrapped text",
             inline=False
         )
         
         embed.set_footer(text="🔒 Requires Moderator Role | ♠️ BLACK JACK Moderation")
-        
-    elif category.lower() == "tickets":
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label='🎫 Ticket System', style=discord.ButtonStyle.success, custom_id='help_tickets')
+    async def help_tickets(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(
             title="🎫 Ticket System Commands",
             description="**Professional support ticket management**",
@@ -807,25 +1073,8 @@ async def help_command(ctx, category=None):
             inline=False
         )
         
-        embed.set_footer(text="🔧 Setup required in configuration | ♠️ BLACK JACK Support")
-        
-    elif category.lower() == "general":
-        embed = discord.Embed(
-            title="⚙️ General Bot Commands",
-            description="**Basic utilities and information**",
-            color=0xff9900
-        )
-        
         embed.add_field(
-            name="**Utility Commands**",
-            value="`&help` - Show this help menu\n"
-                  "`&help [category]` - Show specific category help\n"
-                  "`&movevc @user #channel` - Move user between VCs",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="**Automated Features**",
+            name="**Automated Systems**",
             value="• **Reaction Roles** - Auto-role assignment\n"
                   "• **Welcome Messages** - New member greetings\n"
                   "• **User Mention Alerts** - Dev notification system\n"
@@ -833,16 +1082,39 @@ async def help_command(ctx, category=None):
             inline=False
         )
         
-        embed.set_footer(text="⚡ Always active | ♠️ BLACK JACK Utilities")
-        
-    else:
-        embed = discord.Embed(
-            title="❌ Invalid Help Category",
-            description="Available categories: `voice`, `tickets`, `general`\n\nUse `&help` to see all categories.",
-            color=0xff0000
-        )
+        embed.set_footer(text="🔧 Setup required in configuration | ♠️ BLACK JACK Support")
+        await interaction.response.edit_message(embed=embed, view=self)
+
+# =================================================================================================
+# HELP COMMAND
+# =================================================================================================
+
+@bot.command(name='help')
+async def help_command(ctx):
+    """Interactive help panel with buttons for different command categories."""
+    embed = discord.Embed(
+        title="♠️ BLACK JACK BOT - Command Help Panel",
+        description="**Premium Discord Bot for Server Management & Moderation**\n\n🎮 **Select a category below to view detailed commands:**",
+        color=0x000000
+    )
     
-    await ctx.send(embed=embed)
+    embed.add_field(
+        name="📊 Bot Information",
+        value="• **Prefix:** `&`\n• **Version:** 3.0\n• **Features:** Voice, Tickets, Moderation\n• **Uptime:** 24/7",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="🔒 Access Control",
+        value="Most commands require the **Moderator Role**\nSome features are available to all users",
+        inline=False
+    )
+    
+    embed.set_footer(text="♠️ Click the buttons below to explore different command categories")
+    embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
+    
+    view = HelpView()
+    await ctx.send(embed=embed, view=view)
 
 
 # Add persistent views when bot starts
@@ -854,7 +1126,8 @@ async def on_ready():
     # Add persistent views
     bot.add_view(TicketView())
     bot.add_view(CloseTicketView())
-    print("Persistent views added for ticket system!")
+    bot.add_view(HelpView())
+    print("Persistent views added for ticket system and help panel!")
 
 
 # =================================================================================================
