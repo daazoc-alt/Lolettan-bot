@@ -49,15 +49,13 @@ https://discord.com/channels/1398556295438794773/1398649721521967145
 
 # --- CONFIGURATION FOR TICKET SYSTEM ---
 TICKET_CONFIG = {
-    "ticket_channel_id": 0, # ❗ PASTE THE CHANNEL ID WHERE THE TICKET MESSAGE WILL BE POSTED
-    "active_tickets_category_id": 0, # ❗ PASTE THE CATEGORY ID WHERE NEW TICKETS WILL BE CREATED
-    "closed_tickets_category_id": 0, # ❗ PASTE THE CATEGORY ID WHERE CLOSED TICKETS WILL BE MOVED
-    "support_role_id": 0, # ❗ PASTE THE ROLE ID THAT CAN ACCESS TICKETS
-    "ticket_description": """🎫 **Open a Ticket**
-Having an issue or a question?
-Click the button below to create a private support ticket.
-
-🔧 TicketTool.xyz - Ticketing without clutter""" # ❗ CUSTOMIZE YOUR TICKET DESCRIPTION
+    "ticket_channel_id": 1398870471310573578, # Channel where the ticket message will be posted
+    "active_tickets_category_id": 1398868213604814848, # Category where new tickets will be created
+    "closed_tickets_category_id": 1398871882706583612, # Category where closed tickets will be moved
+    "support_role_id": 1398867140681138267, # Role that can access tickets
+    "ticket_description": """**🎰 ɴᴇᴇᴅ ᴀssɪsᴛᴀɴᴄᴇ?**
+ʜɪᴛ ᴛʜᴇ ʙᴜᴛᴛᴏɴ ʙᴇʟᴏᴡ ᴛᴏ ᴏᴘᴇɴ ᴀ ᴛɪᴄᴋᴇᴛ.
+🃏 ғᴏʀ ᴅᴇᴀʟs, sᴜᴘᴘᴏʀᴛ, ᴏʀ ɢᴀᴍᴇ ɪssᴜᴇs — ᴡᴇ ɢᴏᴛ ʏᴏᴜ!""" # Custom ticket description
 }
 
 
