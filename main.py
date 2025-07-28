@@ -58,6 +58,17 @@ TICKET_CONFIG = {
 🃏 ғᴏʀ ᴅᴇᴀʟs, sᴜᴘᴘᴏʀᴛ, ᴏʀ ɢᴀᴍᴇ ɪssᴜᴇs — ᴡᴇ ɢᴏᴛ ʏᴏᴜ!""" # Custom ticket description
 }
 
+# --- CONFIGURATION FOR MODERATION SYSTEM ---
+MODERATION_CONFIG = {
+    "moderator_role_id": 1398867140681138267, # Role that can use moderation commands
+    "log_channel_id": 1399357783094202388, # Channel where command logs are sent
+}
+
+# Voice channel tracking for logs and settings
+voice_logs = []
+voice_channel_settings = {}
+voice_bans = {}  # {channel_id: {user_id: timestamp}}
+
 
 # =================================================================================================
 # BOT SETUP (You don't need to change this part)
@@ -71,8 +82,43 @@ intents.guilds = True
 intents.reactions = True
 
 # Create bot instance
-bot = commands.Bot(command_prefix='&', intents=intents)
+bot = commands.Bot(command_prefix='&', intents=intents, help_command=None)
 
+
+# =================================================================================================
+# MODERATION HELPER FUNCTIONS
+# =================================================================================================
+
+import datetime
+import asyncio
+
+def has_moderator_role():
+    """Decorator to check if user has moderator role."""
+    def predicate(ctx):
+        moderator_role = ctx.guild.get_role(MODERATION_CONFIG["moderator_role_id"])
+        return moderator_role in ctx.author.roles
+    return commands.check(predicate)
+
+async def log_command(ctx, command_name, details=""):
+    """Log command usage to the configured log channel."""
+    log_channel = bot.get_channel(MODERATION_CONFIG["log_channel_id"])
+    if log_channel:
+        embed = discord.Embed(
+            title="🔧 Command Used",
+            color=0x00ff00,
+            timestamp=datetime.datetime.utcnow()
+        )
+        embed.add_field(name="Command", value=f"`{command_name}`", inline=True)
+        embed.add_field(name="User", value=ctx.author.mention, inline=True)
+        embed.add_field(name="Channel", value=ctx.channel.mention, inline=True)
+        if details:
+            embed.add_field(name="Details", value=details, inline=False)
+        embed.set_footer(text="♠️ BLACK JACK Moderation Logs")
+        
+        try:
+            await log_channel.send(embed=embed)
+        except:
+            pass
 
 # =================================================================================================
 # BOT EVENTS AND COMMANDS
@@ -82,6 +128,47 @@ bot = commands.Bot(command_prefix='&', intents=intents)
 async def on_ready():
     """Prints a message to the console when the bot is online."""
     print(f'Bot {bot.user} is online and ready! 🚀')
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    """Track voice channel joins/leaves for logs."""
+    timestamp = datetime.datetime.utcnow()
+    
+    if before.channel != after.channel:
+        if before.channel is None and after.channel is not None:
+            # User joined a voice channel
+            log_entry = {
+                "action": "joined",
+                "user": member,
+                "channel": after.channel,
+                "timestamp": timestamp
+            }
+            voice_logs.append(log_entry)
+            
+        elif before.channel is not None and after.channel is None:
+            # User left a voice channel
+            log_entry = {
+                "action": "left",
+                "user": member,
+                "channel": before.channel,
+                "timestamp": timestamp
+            }
+            voice_logs.append(log_entry)
+            
+        elif before.channel is not None and after.channel is not None:
+            # User moved between channels
+            log_entry = {
+                "action": "moved",
+                "user": member,
+                "from_channel": before.channel,
+                "to_channel": after.channel,
+                "timestamp": timestamp
+            }
+            voice_logs.append(log_entry)
+    
+    # Keep only last 100 log entries
+    if len(voice_logs) > 100:
+        voice_logs.pop(0)
 
 
 # --- Feature 1: Reaction Roles & DM on Verify ---
@@ -169,6 +256,261 @@ async def movevc_error(ctx, error):
         await ctx.send("Sorry, you don't have the 'Move Members' permission to do that.")
     else:
         await ctx.send("Usage: `&movevc @User #voice-channel-name`")
+
+
+# =================================================================================================
+# VOICE CHANNEL MODERATION COMMANDS
+# =================================================================================================
+
+@bot.group(name='vc', invoke_without_command=True)
+@has_moderator_role()
+async def vc(ctx):
+    """Voice channel moderation commands."""
+    if ctx.invoked_subcommand is None:
+        embed = discord.Embed(
+            title="🎙️ Voice Channel Commands",
+            description="Available voice channel moderation commands:",
+            color=0x0099ff
+        )
+        embed.add_field(name="&vc mute @user", value="Mute a user in voice channel", inline=False)
+        embed.add_field(name="&vc unmute @user", value="Unmute a user in voice channel", inline=False)
+        embed.add_field(name="&vc kick @user", value="Disconnect user from voice channel", inline=False)
+        embed.add_field(name="&vc lock", value="Lock your current voice channel", inline=False)
+        embed.add_field(name="&vc unlock", value="Unlock your current voice channel", inline=False)
+        embed.add_field(name="&vc ban @user", value="Temporarily ban user from your VC", inline=False)
+        embed.add_field(name="&vc move @user #channel", value="Move user to another voice channel", inline=False)
+        embed.set_footer(text="♠️ BLACK JACK Moderation")
+        await ctx.send(embed=embed)
+
+@vc.command(name='mute')
+@has_moderator_role()
+async def vc_mute(ctx, member: discord.Member):
+    """Mute a user in voice channel."""
+    if not member.voice or not member.voice.channel:
+        await ctx.send(f"❌ {member.mention} is not in a voice channel.")
+        return
+    
+    try:
+        await member.edit(mute=True)
+        await ctx.send(f"🔇 {member.mention} has been muted in voice channel.")
+        await log_command(ctx, "&vc mute", f"Muted {member.mention} in {member.voice.channel.name}")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to mute this user.")
+
+@vc.command(name='unmute')
+@has_moderator_role()
+async def vc_unmute(ctx, member: discord.Member):
+    """Unmute a user in voice channel."""
+    if not member.voice or not member.voice.channel:
+        await ctx.send(f"❌ {member.mention} is not in a voice channel.")
+        return
+    
+    try:
+        await member.edit(mute=False)
+        await ctx.send(f"🔊 {member.mention} has been unmuted in voice channel.")
+        await log_command(ctx, "&vc unmute", f"Unmuted {member.mention} in {member.voice.channel.name}")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to unmute this user.")
+
+@vc.command(name='kick')
+@has_moderator_role()
+async def vc_kick(ctx, member: discord.Member):
+    """Disconnect a user from voice channel."""
+    if not member.voice or not member.voice.channel:
+        await ctx.send(f"❌ {member.mention} is not in a voice channel.")
+        return
+    
+    channel_name = member.voice.channel.name
+    try:
+        await member.move_to(None)
+        await ctx.send(f"👢 {member.mention} has been disconnected from voice channel.")
+        await log_command(ctx, "&vc kick", f"Kicked {member.mention} from {channel_name}")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to disconnect this user.")
+
+@vc.command(name='lock')
+@has_moderator_role()
+async def vc_lock(ctx):
+    """Lock your current voice channel."""
+    if not ctx.author.voice or not ctx.author.voice.channel:
+        await ctx.send("❌ You must be in a voice channel to use this command.")
+        return
+    
+    channel = ctx.author.voice.channel
+    try:
+        await channel.set_permissions(ctx.guild.default_role, connect=False)
+        voice_channel_settings[channel.id] = voice_channel_settings.get(channel.id, {})
+        voice_channel_settings[channel.id]['locked'] = True
+        await ctx.send(f"🔒 Voice channel **{channel.name}** has been locked.")
+        await log_command(ctx, "&vc lock", f"Locked voice channel {channel.name}")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to modify this voice channel.")
+
+@vc.command(name='unlock')
+@has_moderator_role()
+async def vc_unlock(ctx):
+    """Unlock your current voice channel."""
+    if not ctx.author.voice or not ctx.author.voice.channel:
+        await ctx.send("❌ You must be in a voice channel to use this command.")
+        return
+    
+    channel = ctx.author.voice.channel
+    try:
+        await channel.set_permissions(ctx.guild.default_role, connect=None)
+        if channel.id in voice_channel_settings:
+            voice_channel_settings[channel.id]['locked'] = False
+        await ctx.send(f"🔓 Voice channel **{channel.name}** has been unlocked.")
+        await log_command(ctx, "&vc unlock", f"Unlocked voice channel {channel.name}")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to modify this voice channel.")
+
+@vc.command(name='ban')
+@has_moderator_role()
+async def vc_ban(ctx, member: discord.Member):
+    """Temporarily ban a user from your voice channel."""
+    if not ctx.author.voice or not ctx.author.voice.channel:
+        await ctx.send("❌ You must be in a voice channel to use this command.")
+        return
+    
+    channel = ctx.author.voice.channel
+    try:
+        # Disconnect user if they're in the channel
+        if member.voice and member.voice.channel == channel:
+            await member.move_to(None)
+        
+        # Set permissions to deny connect
+        await channel.set_permissions(member, connect=False)
+        
+        # Track the ban (expires in 1 hour)
+        if channel.id not in voice_bans:
+            voice_bans[channel.id] = {}
+        voice_bans[channel.id][member.id] = datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+        
+        await ctx.send(f"🚫 {member.mention} has been temporarily banned from **{channel.name}** for 1 hour.")
+        await log_command(ctx, "&vc ban", f"Banned {member.mention} from {channel.name}")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to ban this user from the voice channel.")
+
+@vc.command(name='move')
+@has_moderator_role()
+async def vc_move(ctx, member: discord.Member, channel: discord.VoiceChannel):
+    """Move a user to another voice channel."""
+    if not member.voice or not member.voice.channel:
+        await ctx.send(f"❌ {member.mention} is not in a voice channel.")
+        return
+    
+    old_channel = member.voice.channel.name
+    try:
+        await member.move_to(channel)
+        await ctx.send(f"📤 {member.mention} has been moved to **{channel.name}**.")
+        await log_command(ctx, "&vc move", f"Moved {member.mention} from {old_channel} to {channel.name}")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to move this user.")
+
+@bot.command(name='voice')
+@has_moderator_role()
+async def voice(ctx, action=None, value=None):
+    """Voice channel management commands."""
+    if action == "logs":
+        if not voice_logs:
+            await ctx.send("📝 No voice channel activity recorded yet.")
+            return
+        
+        embed = discord.Embed(
+            title="🎙️ Voice Channel Logs",
+            color=0x0099ff,
+            timestamp=datetime.datetime.utcnow()
+        )
+        
+        # Show last 10 entries
+        recent_logs = voice_logs[-10:]
+        log_text = ""
+        
+        for log in recent_logs:
+            time_str = log['timestamp'].strftime("%H:%M:%S")
+            if log['action'] == 'joined':
+                log_text += f"`{time_str}` ➡️ {log['user'].mention} joined **{log['channel'].name}**\n"
+            elif log['action'] == 'left':
+                log_text += f"`{time_str}` ⬅️ {log['user'].mention} left **{log['channel'].name}**\n"
+            elif log['action'] == 'moved':
+                log_text += f"`{time_str}` 🔄 {log['user'].mention} moved from **{log['from_channel'].name}** to **{log['to_channel'].name}**\n"
+        
+        embed.description = log_text if log_text else "No recent activity"
+        embed.set_footer(text="♠️ BLACK JACK Voice Logs")
+        await ctx.send(embed=embed)
+        await log_command(ctx, "&voice logs", "Viewed voice channel logs")
+        
+    elif action == "settings":
+        embed = discord.Embed(
+            title="🎙️ Voice Channel Settings",
+            description="Voice channel configuration options:",
+            color=0x0099ff
+        )
+        embed.add_field(name="&voice limit <number>", value="Set user limit for your VC", inline=False)
+        embed.add_field(name="&vc lock/unlock", value="Lock/unlock your voice channel", inline=False)
+        embed.add_field(name="&vc ban @user", value="Temporarily ban user from VC", inline=False)
+        embed.set_footer(text="♠️ BLACK JACK Voice Settings")
+        await ctx.send(embed=embed)
+        
+    elif action == "limit" and value:
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send("❌ You must be in a voice channel to use this command.")
+            return
+        
+        try:
+            limit = int(value)
+            if limit < 0 or limit > 99:
+                await ctx.send("❌ Voice channel limit must be between 0 and 99.")
+                return
+            
+            channel = ctx.author.voice.channel
+            await channel.edit(user_limit=limit)
+            await ctx.send(f"👥 Voice channel **{channel.name}** user limit set to {limit}.")
+            await log_command(ctx, "&voice limit", f"Set {channel.name} limit to {limit}")
+        except ValueError:
+            await ctx.send("❌ Please provide a valid number for the limit.")
+        except discord.Forbidden:
+            await ctx.send("❌ I don't have permission to modify this voice channel.")
+    else:
+        await ctx.send("❌ Usage: `&voice logs`, `&voice settings`, or `&voice limit <number>`")
+
+@bot.command(name='nick')
+@has_moderator_role()
+async def change_nick(ctx, member: discord.Member, *, new_name):
+    """Change a user's nickname."""
+    old_name = member.display_name
+    try:
+        await member.edit(nick=new_name)
+        await ctx.send(f"✏️ Changed {member.mention}'s nickname from **{old_name}** to **{new_name}**.")
+        await log_command(ctx, "&nick", f"Changed {member.mention}'s nickname from {old_name} to {new_name}")
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to change this user's nickname.")
+    except discord.HTTPException:
+        await ctx.send("❌ Failed to change nickname. The name might be too long or invalid.")
+
+# Error handlers for moderation commands
+@vc.error
+async def vc_error(ctx, error):
+    if isinstance(error, commands.CheckFailure):
+        await ctx.send("❌ You don't have permission to use moderation commands.")
+    elif isinstance(error, commands.MemberNotFound):
+        await ctx.send("❌ User not found. Please mention a valid user.")
+    elif isinstance(error, commands.ChannelNotFound):
+        await ctx.send("❌ Voice channel not found. Please mention a valid voice channel.")
+
+@voice.error
+async def voice_error(ctx, error):
+    if isinstance(error, commands.CheckFailure):
+        await ctx.send("❌ You don't have permission to use moderation commands.")
+
+@change_nick.error
+async def nick_error(ctx, error):
+    if isinstance(error, commands.CheckFailure):
+        await ctx.send("❌ You don't have permission to use moderation commands.")
+    elif isinstance(error, commands.MemberNotFound):
+        await ctx.send("❌ User not found. Please mention a valid user.")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("❌ Usage: `&nick @user [new_name]`")
 
 
 # --- Feature 4: Reply on Role Mention ---
@@ -356,6 +698,151 @@ async def setup_tickets(ctx):
 async def setup_tickets_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         await ctx.send("❌ You need 'Manage Channels' permission to set up the ticket system.")
+
+
+# =================================================================================================
+# HELP COMMAND
+# =================================================================================================
+
+@bot.command(name='help')
+async def help_command(ctx, category=None):
+    """Professional help command showing all bot features."""
+    if category is None:
+        embed = discord.Embed(
+            title="♠️ BLACK JACK BOT - Command Help",
+            description="**Premium Discord Bot for Server Management & Moderation**",
+            color=0x000000
+        )
+        
+        embed.add_field(
+            name="🎙️ Voice Moderation",
+            value="`&help voice` - Voice channel management commands",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🎫 Ticket System",
+            value="`&help tickets` - Support ticket system commands",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="⚙️ General Commands",
+            value="`&help general` - Basic bot commands and utilities",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="📊 Information",
+            value="• **Prefix:** `&`\n• **Version:** 2.0\n• **Uptime:** 24/7",
+            inline=False
+        )
+        
+        embed.set_footer(text="♠️ Use &help [category] for detailed command information")
+        embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
+        
+    elif category.lower() == "voice":
+        embed = discord.Embed(
+            title="🎙️ Voice Channel Moderation Commands",
+            description="**Professional voice channel management tools**",
+            color=0x0099ff
+        )
+        
+        embed.add_field(
+            name="**Basic Voice Control**",
+            value="`&vc mute @user` - Mute user in voice channel\n"
+                  "`&vc unmute @user` - Unmute user in voice channel\n"
+                  "`&vc kick @user` - Disconnect user from VC\n"
+                  "`&vc move @user #channel` - Move user to another VC",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="**Channel Management**",
+            value="`&vc lock` - Lock your current voice channel\n"
+                  "`&vc unlock` - Unlock your current voice channel\n"
+                  "`&vc ban @user` - Temporarily ban user from VC\n"
+                  "`&voice limit <number>` - Set VC user limit (0-99)",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="**Monitoring & Settings**",
+            value="`&voice logs` - Show recent VC join/leave activity\n"
+                  "`&voice settings` - Configure voice channel options",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="**User Management**",
+            value="`&nick @user [new_name]` - Change user's nickname",
+            inline=False
+        )
+        
+        embed.set_footer(text="🔒 Requires Moderator Role | ♠️ BLACK JACK Moderation")
+        
+    elif category.lower() == "tickets":
+        embed = discord.Embed(
+            title="🎫 Ticket System Commands",
+            description="**Professional support ticket management**",
+            color=0x00ff00
+        )
+        
+        embed.add_field(
+            name="**Ticket Management**",
+            value="`&setup_tickets` - Initialize ticket system in configured channel\n"
+                  "**Interactive Buttons:**\n"
+                  "• 📧 Create ticket - Opens new support ticket\n"
+                  "• 🔒 Close ticket - Closes and archives ticket",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="**Features**",
+            value="• Private ticket channels\n"
+                  "• Auto-role permissions\n"
+                  "• Ticket archiving system\n"
+                  "• Duplicate prevention\n"
+                  "• Professional embeds",
+            inline=False
+        )
+        
+        embed.set_footer(text="🔧 Setup required in configuration | ♠️ BLACK JACK Support")
+        
+    elif category.lower() == "general":
+        embed = discord.Embed(
+            title="⚙️ General Bot Commands",
+            description="**Basic utilities and information**",
+            color=0xff9900
+        )
+        
+        embed.add_field(
+            name="**Utility Commands**",
+            value="`&help` - Show this help menu\n"
+                  "`&help [category]` - Show specific category help\n"
+                  "`&movevc @user #channel` - Move user between VCs",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="**Automated Features**",
+            value="• **Reaction Roles** - Auto-role assignment\n"
+                  "• **Welcome Messages** - New member greetings\n"
+                  "• **User Mention Alerts** - Dev notification system\n"
+                  "• **Voice Activity Logging** - Join/leave tracking",
+            inline=False
+        )
+        
+        embed.set_footer(text="⚡ Always active | ♠️ BLACK JACK Utilities")
+        
+    else:
+        embed = discord.Embed(
+            title="❌ Invalid Help Category",
+            description="Available categories: `voice`, `tickets`, `general`\n\nUse `&help` to see all categories.",
+            color=0xff0000
+        )
+    
+    await ctx.send(embed=embed)
 
 
 # Add persistent views when bot starts
