@@ -700,8 +700,7 @@ async def setup_tickets(ctx):
 
     view = TicketView()
     await ticket_channel.send(embed=embed, view=view)
-    await ctx.send(f"```python
-✅ Ticket system set up in {ticket_channel.mention}")
+    await ctx.send(f"✅ Ticket system set up in {ticket_channel.mention}")
 
 @setup_tickets.error
 async def setup_tickets_error(ctx, error):
