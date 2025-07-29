@@ -1716,6 +1716,24 @@ async def reset_balance_command(ctx, amount: int = 1000):
     await ctx.send(embed=embed, delete_after=15)
     await log_command(ctx, "&resetbalance", f"Reset balance to ${amount:,}")
 
+# Error handlers for casino commands
+@casino_command.error
+async def casino_error(ctx, error):
+    if isinstance(error, commands.CheckFailure):
+        await ctx.send("❌ You don't have permission to use casino commands.", delete_after=5)
+
+@balance_command.error  
+async def balance_error(ctx, error):
+    if isinstance(error, commands.CheckFailure):
+        await ctx.send("❌ You don't have permission to use casino commands.", delete_after=5)
+
+@reset_balance_command.error
+async def reset_balance_error(ctx, error):
+    if isinstance(error, commands.CheckFailure):
+        await ctx.send("❌ You don't have permission to reset the balance.", delete_after=5)
+    elif isinstance(error, commands.BadArgument):
+        await ctx.send("❌ Please provide a valid number for the balance amount.", delete_after=5)
+
 # =================================================================================================
 # RUN THE BOT
 # =================================================================================================
