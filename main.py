@@ -1267,7 +1267,7 @@ async def balance_command(ctx):
     """Check current casino balance."""
     embed = discord.Embed(
         title="💰 Casino Balance",
-        description=f"**Current Balance:** ${casino_data['balance']:,}",
+        description=f"**Current Balance:** ₹{casino_data['balance']:,}",
         color=0xffd700
     )
 
@@ -1354,7 +1354,7 @@ class CasinoView(discord.ui.View):
             description="**Choose your game outcome:**\n\n🟢 **WIN** - You won this round!\n🔴 **LOSE** - You lost this round!",
             color=0xffd700
         )
-        embed.add_field(name="💰 Current Balance", value=f"${casino_data['balance']:,}", inline=True)
+        embed.add_field(name="💰 Current Balance", value=f"₹{casino_data['balance']:,}", inline=True)
         embed.add_field(name="🎮 Session Games", value=f"{len(casino_data['session_games'])}", inline=True)
         embed.set_footer(text="♠️ BlackJack Casino | Choose WIN or LOSE")
         await interaction.response.edit_message(embed=embed, view=view)
@@ -1373,7 +1373,7 @@ class CasinoView(discord.ui.View):
             description="**🎲 Ready to play another round!**\n\n**Options:**\n🎲 **Play**\n⏸️ **Skip**\n🛑 **End Session**",
             color=0x00ff00
         )
-        embed.add_field(name="💰 Current Balance", value=f"${casino_data['balance']:,}", inline=True)
+        embed.add_field(name="💰 Current Balance", value=f"₹{casino_data['balance']:,}", inline=True)
         embed.add_field(name="🎮 Session Games", value=f"{len(casino_data['session_games'])}", inline=True)
         embed.add_field(name="⏱️ Session Duration", value=f"{get_session_duration()}", inline=True)
         embed.set_footer(text="♠️ BlackJack Casino | Session in Progress")
@@ -1439,38 +1439,40 @@ class CasinoView(discord.ui.View):
         except Exception as e:
             print(f"Error creating chart: {e}")
 
+            await interaction.followup.send("❌ An error occurred while generating the session report. Please try again.", ephemeral=True)
+
         # Create detailed embed report
         embed = discord.Embed(
-            title="📊 BlackJack Session Report - Complete Analysis", 
-            description="**🎰 Comprehensive session statistics and performance analysis**", 
+            title="📊 BlackJack Session Report - Complete Analysis",
+            description="**🎰 Comprehensive session statistics and performance analysis**",
             color=0xffd700
         )
 
         # Session Overview
         embed.add_field(
-            name="⏱️ Session Overview", 
-            value=f"**Duration:** {get_session_duration()}\n**Games Played:** {total_games}\n**Starting Balance:** ${casino_data.get('starting_balance', 'Unknown'):,}\n**Final Balance:** ${casino_data['balance']:,}", 
+            name="⏱️ Session Overview",
+            value=f"**Duration:** {get_session_duration()}\n**Games Played:** {total_games}\n**Starting Balance:** ₹{casino_data.get('starting_balance', 'Unknown'):,}\n**Final Balance:** ₹{casino_data['balance']:,}",
             inline=True
         )
 
         # Performance Statistics
         embed.add_field(
-            name="🎯 Performance Stats", 
-            value=f"**Wins:** {wins} 🟢\n**Losses:** {losses} 🔴\n**Win Rate:** {win_rate:.1f}%\n**Avg Bet:** ${avg_bet:.2f}", 
+            name="🎯 Performance Stats",
+            value=f"**Wins:** {wins} 🟢\n**Losses:** {losses} 🔴\n**Win Rate:** {win_rate:.1f}%\n**Avg Bet:** ₹{avg_bet:.2f}",
             inline=True
         )
 
         # Financial Summary
         embed.add_field(
-            name="💰 Financial Summary", 
-            value=f"**Total Bet:** ${total_bet:,}\n**Total Won:** ${total_won:,}\n**Total Lost:** ${total_lost:,}\n**Net Profit:** ${net_profit:+,}", 
+            name="💰 Financial Summary",
+            value=f"**Total Bet:** ₹{total_bet:,}\n**Total Won:** ₹{total_won:,}\n**Total Lost:** ₹{total_lost:,}\n**Net Profit:** ₹{net_profit:+,}",
             inline=True
         )
 
         # Betting Statistics
         embed.add_field(
             name="📈 Betting Analysis",
-            value=f"**Biggest Win:** ${biggest_win:,}\n**Biggest Loss:** ${biggest_loss:,}\n**Profit Margin:** {((net_profit/total_bet)*100) if total_bet > 0 else 0:.1f}%\n**ROI:** {((net_profit/total_bet)*100) if total_bet > 0 else 0:.1f}%",
+            value=f"**Biggest Win:** ₹{biggest_win:,}\n**Biggest Loss:** ₹{biggest_loss:,}\n**Profit Margin:** {((net_profit/total_bet)*100) if total_bet > 0 else 0:.1f}%\n**ROI:** {((net_profit/total_bet)*100) if total_bet > 0 else 0:.1f}%",
             inline=True
         )
 
@@ -1486,11 +1488,11 @@ class CasinoView(discord.ui.View):
         recent_text = ""
         for i, g in enumerate(recent_games):
             game_num = len(session_games) - len(recent_games) + i + 1
-            recent_text += f"`Game {game_num}:` {'🟢 WIN' if g['outcome'] == 'win' else '🔴 LOSE'} ${g['amount']:,}\n"
+            recent_text += f"`Game {game_num}:` {'🟢 WIN' if g['outcome'] == 'win' else '🔴 LOSE'} ₹{g['amount']:,}\n"
 
         embed.add_field(
-            name="🎮 Recent Game History (Last 10)", 
-            value=recent_text if recent_text else "No games played", 
+            name="🎮 Recent Game History (Last 10)",
+            value=recent_text if recent_text else "No games played",
             inline=False
         )
 
@@ -1517,8 +1519,8 @@ class CasinoView(discord.ui.View):
         # Add timestamp
         from datetime import datetime
         embed.add_field(
-            name="🕐 Session Completed", 
-            value=f"<t:{int(datetime.now().timestamp())}:F>", 
+            name="🕐 Session Completed",
+            value=f"<t:{int(datetime.now().timestamp())}:F>",
             inline=False
         )
 
@@ -1561,7 +1563,7 @@ class CasinoView(discord.ui.View):
             ax1.set_facecolor('#36393f')
             bars = ax1.bar(game_numbers, amounts, color=colors, alpha=0.7, edgecolor='white', linewidth=0.5)
             ax1.set_xlabel('Game Number', color='white', fontweight='bold')
-            ax1.set_ylabel('Bet Amount ($)', color='white', fontweight='bold')
+            ax1.set_ylabel('Bet Amount (₹)', color='white', fontweight='bold')
             ax1.set_title('🎰 BlackJack Session - Individual Game Results', color='#ffd700', fontsize=14, fontweight='bold', pad=15)
             ax1.grid(True, axis='y', alpha=0.3, linestyle=':')
 
@@ -1569,18 +1571,18 @@ class CasinoView(discord.ui.View):
             for bar, amount in zip(bars, amounts):
                 height = bar.get_height()
                 ax1.text(bar.get_x() + bar.get_width()/2., height + max(amounts)*0.01,
-                        f'${amount:,}', ha='center', va='bottom', color='white', fontsize=8)
+                        f'₹{amount:,}', ha='center', va='bottom', color='white', fontsize=8)
 
             # Bottom chart - Running profit trend
             ax2.set_facecolor('#36393f')
             line = ax2.plot(game_numbers, running_profit, color='#ffd700', linewidth=3, marker='o', markersize=6, label='Net Profit')
             ax2.axhline(0, color='white', linestyle='--', linewidth=2, alpha=0.7)
-            ax2.fill_between(game_numbers, running_profit, 0, where=[p >= 0 for p in running_profit], 
+            ax2.fill_between(game_numbers, running_profit, 0, where=[p >= 0 for p in running_profit],
                            color='#00ff41', alpha=0.3, interpolate=True, label='Profit Zone')
-            ax2.fill_between(game_numbers, running_profit, 0, where=[p < 0 for p in running_profit], 
+            ax2.fill_between(game_numbers, running_profit, 0, where=[p < 0 for p in running_profit],
                            color='#ff4757', alpha=0.3, interpolate=True, label='Loss Zone')
             ax2.set_xlabel('Game Number', color='white', fontweight='bold')
-            ax2.set_ylabel('Session Net Profit ($)', color='white', fontweight='bold')
+            ax2.set_ylabel('Session Net Profit (₹)', color='white', fontweight='bold')
             ax2.set_title('📈 Cumulative Profit/Loss Trend', color='#ffd700', fontsize=14, fontweight='bold', pad=15)
             ax2.grid(True, alpha=0.3, linestyle=':')
             ax2.legend(loc='upper left')
@@ -1591,7 +1593,7 @@ class CasinoView(discord.ui.View):
             win_rate = (wins / total_games) * 100 if total_games > 0 else 0
             final_profit = running_profit[-1] if running_profit else 0
 
-            stats_text = f'📊 Session Stats:\nGames: {total_games} | Wins: {wins} | Win Rate: {win_rate:.1f}%\nFinal P&L: ${final_profit:+,}'
+            stats_text = f'📊 Session Stats:\nGames: {total_games} | Wins: {wins} | Win Rate: {win_rate:.1f}%\nFinal P&L: ₹{final_profit:+,}'
             ax2.text(0.02, 0.98, stats_text, transform=ax2.transAxes, fontsize=10,
                     verticalalignment='top', bbox=dict(boxstyle='round', facecolor='#36393f', alpha=0.8),
                     color='white')
@@ -1645,10 +1647,10 @@ class BalanceModal(discord.ui.Modal):
                 await interaction.response.send_message("❌ Balance must be a positive number!", ephemeral=True)
                 return
             casino_data.update({
-                "balance": balance, 
+                "balance": balance,
                 "starting_balance": balance,  # Store starting balance for reporting
-                "session_active": True, 
-                "session_start": datetime.now(), 
+                "session_active": True,
+                "session_start": datetime.now(),
                 "session_games": []
             })
             view = CasinoView()
@@ -1656,7 +1658,7 @@ class BalanceModal(discord.ui.Modal):
             view.skip_game.disabled = False
             view.end_session.disabled = False
             embed = discord.Embed(title="🎰 BlackJack Casino - Session Started!", description="**🎲 Your casino session is now active!**\n\n**Options:**\n🎲 **Play**\n⏸️ **Skip**\n🛑 **End Session**", color=0x00ff00)
-            embed.add_field(name="💰 Starting Balance", value=f"${balance:,}", inline=True)
+            embed.add_field(name="💰 Starting Balance", value=f"₹{balance:,}", inline=True)
             embed.add_field(name="🎮 Games Played", value="0", inline=True)
             embed.add_field(name="⏱️ Session Started", value="Just now", inline=True)
             embed.set_footer(text="♠️ BlackJack Casino | Good luck!")
@@ -1691,10 +1693,10 @@ class AmountModal(discord.ui.Modal):
 
             embed = discord.Embed(
                 title="🎰 BlackJack Casino - Game Recorded!",
-                description=f"**{'🟢 WIN' if self.outcome == 'win' else '🔴 LOSE'}**\n\n**Bet Amount:** ${amount:,}\n**Balance Change:** {f'+${amount:,}' if self.outcome == 'win' else f'-${amount:,}'}",
+                description=f"**{'🟢 WIN' if self.outcome == 'win' else '🔴 LOSE'}**\n\n**Bet Amount:** ₹{amount:,}\n**Balance Change:** {f'+₹{amount:,}' if self.outcome == 'win' else f'-₹{amount:,}'}",
                 color=0x00ff00 if self.outcome == "win" else 0xff0000
             )
-            embed.add_field(name="💰 New Balance", value=f"${casino_data['balance']:,}", inline=True)
+            embed.add_field(name="💰 New Balance", value=f"₹{casino_data['balance']:,}", inline=True)
             embed.add_field(name="🎮 Session Games", value=f"{len(casino_data['session_games'])}", inline=True)
             embed.add_field(name="⏱️ Session Duration", value=f"{get_session_duration()}", inline=True)
             wins = sum(1 for g in casino_data['session_games'] if g['outcome'] == 'win')
@@ -1721,7 +1723,7 @@ async def casino_command(ctx):
         view.skip_game.disabled = False
         view.end_session.disabled = False
         embed = discord.Embed(title="🎰 BlackJack Casino - Session Active", description="**🎲 Welcome back to your active session!**", color=0x00ff00)
-        embed.add_field(name="💰 Current Balance", value=f"${casino_data['balance']:,}", inline=True)
+        embed.add_field(name="💰 Current Balance", value=f"₹{casino_data['balance']:,}", inline=True)
         embed.add_field(name="🎮 Session Games", value=f"{len(casino_data['session_games'])}", inline=True)
         embed.add_field(name="⏱️ Session Duration", value=f"{get_session_duration()}", inline=True)
     else:
@@ -1751,7 +1753,7 @@ async def on_ready():
 # --- Add these commands to your bot setup ---
 # bot.add_command(casino_command)
 # # Add other commands and their error handlers here
-# 
+#
 # TOKEN = os.getenv('DISCORD_TOKEN')
 # bot.run(TOKEN)
 
