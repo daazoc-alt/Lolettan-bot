@@ -700,7 +700,8 @@ async def setup_tickets(ctx):
 
     view = TicketView()
     await ticket_channel.send(embed=embed, view=view)
-    await ctx.send(f"✅ Ticket system set up in {ticket_channel.mention}")
+    await ctx.send(f"```python
+✅ Ticket system set up in {ticket_channel.mention}")
 
 @setup_tickets.error
 async def setup_tickets_error(ctx, error):
@@ -1251,8 +1252,9 @@ async def on_ready():
     bot.add_view(CloseTicketView())
     bot.add_view(HelpView())
     bot.add_view(CasinoView())
-    bot.add_view(GameView())
-    print("Persistent views added for ticket system, help panel, and casino!")
+    bot.add_view(SideBetView())
+    bot.add_view(GameView(0))  # Default instance
+    print("Persistent views added for ticket system, help panel, and enhanced casino!")
 
 
 # =================================================================================================
@@ -1360,6 +1362,7 @@ class CasinoView(discord.ui.View):
         view.play_game.disabled = False
         view.skip_game.disabled = False
         view.end_session.disabled = False
+        view.cash_out.disabled = False
         embed = discord.Embed(
             title="🎰 BlackJack Casino - Session Active",
             description="**🎲 Ready to play another round!**\n\n**Options:**\n🎲 **Play**\n⏸️ **Skip**\n🛑 **End Session**",
@@ -1385,6 +1388,14 @@ class CasinoView(discord.ui.View):
         except Exception as e:
             print(f"Error generating session report: {e}")
             await interaction.followup.send("❌ An error occurred while generating the session report. Please try again.", ephemeral=True)
+
+    @discord.ui.button(label='💵 Cash Out', style=discord.ButtonStyle.success, custom_id='cash_out', disabled=True)
+    async def cash_out(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not casino_data["session_active"]:
+            await interaction.response.send_message("❌ No active session to cash out from!", ephemeral=True)
+            return
+        modal = CashOutModal()
+        await interaction.response.send_modal(modal)
 
     async def generate_session_report(self, interaction: discord.Interaction):
         session_games = casino_data["session_games"]
@@ -1639,6 +1650,10 @@ class GameView(discord.ui.View):
     @discord.ui.button(label='🟡 TIE', style=discord.ButtonStyle.secondary, custom_id='game_tie')
     async def game_tie(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.record_game(interaction, "tie", 0)
+    
+    @discord.ui.button(label='🂡 BLACKJACK', style=discord.ButtonStyle.primary, custom_id='game_blackjack')
+    async def game_blackjack(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.record_game(interaction, "blackjack", self.bet_amount)
 
     async def record_game(self, interaction, outcome, amount):
         # Record the game
@@ -1659,17 +1674,24 @@ class GameView(discord.ui.View):
             color = 0xff0000
             outcome_text = "🔴 LOSE"
             description = f"**{outcome_text}**\n\n**Bet Amount:** ₹{amount:,}\n**Balance Change:** {balance_change}"
-        else:  # tie
+        elif outcome == "tie":
             balance_change = "No change"
             color = 0xffaa00
             outcome_text = "🟡 TIE"
             description = f"**{outcome_text}**\n\n**No money gainedor lost**\n**Balance Change:** {balance_change}"
+        elif outcome == "blackjack":
+             casino_data["balance"] += amount * 1.5
+             balance_change = f"+₹{amount * 1.5:,}"
+             color = 0x00ff00
+             outcome_text = "🂡 BLACKJACK"
+             description = f"**{outcome_text}**\n\n**Bet Amount:** ₹{amount:,}\n**Balance Change:** {balance_change}"
 
         # Create return view
         view = CasinoView()
         view.play_game.disabled = False
         view.skip_game.disabled = False
         view.end_session.disabled = False
+        view.cash_out.disabled = False
 
         embed = discord.Embed(
             title="🎰 BlackJack Casino - Game Recorded!",
@@ -1679,13 +1701,93 @@ class GameView(discord.ui.View):
         embed.add_field(name="💰 New Balance", value=f"₹{casino_data['balance']:,}", inline=True)
         embed.add_field(name="🎮 Session Games", value=f"{len(casino_data['session_games'])}", inline=True)
         embed.add_field(name="⏱️ Session Duration", value=f"{get_session_duration()}", inline=True)
-        
+
         wins = sum(1 for g in casino_data['session_games'] if g['outcome'] == 'win')
         losses = sum(1 for g in casino_data['session_games'] if g['outcome'] == 'lose')
         ties = sum(1 for g in casino_data['session_games'] if g['outcome'] == 'tie')
-        embed.add_field(name="📊 Session Stats", value=f"Wins: {wins} | Losses: {losses} | Ties: {ties}", inline=False)
+        blackjacks = sum(1 for g in casino_data['session_games'] if g['outcome'] == 'blackjack')
+        embed.add_field(name="📊 Session Stats", value=f"Wins: {wins} | Losses: {losses} | Ties: {ties} | Blackjacks: {blackjacks}", inline=False)
         embed.set_footer(text="♠️ BlackJack Casino | Choose your next action")
         await interaction.response.edit_message(embed=embed, view=view)
+
+class SideBetView(discord.ui.View):  # Create a new SideBetView
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.perfect_pair_enabled = False
+        self.twentyone_plus_three_enabled = False
+        self.dealer_bust_enabled = False
+        self.perfect_pair_bet = 0
+        self.twentyone_plus_three_bet = 0
+        self.dealer_bust_bet = 0
+
+    @discord.ui.button(label='Perfect Pair', style=discord.ButtonStyle.secondary, custom_id='perfect_pair')
+    async def perfect_pair(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.perfect_pair_enabled = not self.perfect_pair_enabled
+        if self.perfect_pair_enabled:
+            modal = SideBetAmountModal(bet_type="Perfect Pair")
+            await interaction.response.send_modal(modal)
+            # button.style = discord.ButtonStyle.success
+        else:
+            # button.style = discord.ButtonStyle.secondary
+            await interaction.response.send_message("Perfect Pair side bet disabled.", ephemeral=True)
+
+    @discord.ui.button(label='21 + 3', style=discord.ButtonStyle.secondary, custom_id='twentyone_plus_three')
+    async def twentyone_plus_three(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.twentyone_plus_three_enabled = not self.twentyone_plus_three_enabled
+        if self.twentyone_plus_three_enabled:
+            modal = SideBetAmountModal(bet_type="21 + 3")
+            await interaction.response.send_modal(modal)
+            # button.style = discord.ButtonStyle.success
+        else:
+            # button.style = discord.ButtonStyle.secondary
+            await interaction.response.send_message("21 + 3 side bet disabled.", ephemeral=True)
+
+    @discord.ui.button(label='Dealer Bust', style=discord.ButtonStyle.secondary, custom_id='dealer_bust')
+    async def dealer_bust(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.dealer_bust_enabled = not self.dealer_bust_enabled
+        if self.dealer_bust_enabled:
+            modal = SideBetAmountModal(bet_type="Dealer Bust")
+            await interaction.response.send_modal(modal)
+            # button.style = discord.ButtonStyle.success
+        else:
+            # button.style = discord.ButtonStyle.secondary
+            await interaction.response.send_message("Dealer Bust side bet disabled.", ephemeral=True)
+
+class CashOutModal(discord.ui.Modal):
+    def __init__(self):
+        super().__init__(title="💵 Enter Amount to Cash Out")
+        self.amount_input = discord.ui.TextInput(label="Enter amount to cash out", placeholder="e.g., 500", required=True, max_length=10)
+        self.add_item(self.amount_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            amount = int(self.amount_input.value.replace('₹', '').replace(',', ''))
+            if amount <= 0:
+                await interaction.response.send_message("❌ Amount must be a positive number!", ephemeral=True)
+                return
+            if amount > casino_data["balance"]:
+                await interaction.response.send_message("❌ Amount cannot be greater than current balance!", ephemeral=True)
+                return
+            casino_data["balance"] -= amount
+            # Add amount to user's main balance (This part depends on how you manage user balances)
+            # For example: user_balance[interaction.user.id] += amount
+            view = CasinoView()
+            view.play_game.disabled = False
+            view.skip_game.disabled = False
+            view.end_session.disabled = False
+            view.cash_out.disabled = False
+            embed = discord.Embed(
+                title="💵 Cash Out Successful!",
+                description=f"**Cashed out: ₹{amount:,}**\n\nAmount has been added to your main balance.",
+                color=0x00ff00
+            )
+            embed.add_field(name="💰 New Balance", value=f"₹{casino_data['balance']:,}", inline=True)
+            embed.add_field(name="🎮 Session Games", value=f"{len(casino_data['session_games'])}", inline=True)
+            embed.add_field(name="⏱️ Session Duration", value=f"{get_session_duration()}", inline=True)
+            embed.set_footer(text="♠️ BlackJack Casino")
+            await interaction.response.edit_message(embed=embed, view=view)
+        except ValueError:
+            await interaction.response.send_message("❌ Please enter a valid number for the amount!", ephemeral=True)
 
 class BalanceModal(discord.ui.Modal):
     def __init__(self, action="start"):
@@ -1710,6 +1812,7 @@ class BalanceModal(discord.ui.Modal):
             view.play_game.disabled = False
             view.skip_game.disabled = False
             view.end_session.disabled = False
+            view.cash_out.disabled = False
             embed = discord.Embed(title="🎰 BlackJack Casino - Session Started!", description="**🎲 Your casino session is now active!**\n\n**Options:**\n🎲 **Play**\n⏸️ **Skip**\n🛑 **End Session**", color=0x00ff00)
             embed.add_field(name="💰 Starting Balance", value=f"₹{balance:,}", inline=True)
             embed.add_field(name="🎮 Games Played", value="0", inline=True)
@@ -1731,7 +1834,7 @@ class BetAmountModal(discord.ui.Modal):
             if amount <= 0:
                 await interaction.response.send_message("❌ Amount must be a positive number!", ephemeral=True)
                 return
-            
+
             # Create game view with the bet amount
             view = GameView(bet_amount=amount)
             embed = discord.Embed(
@@ -1743,6 +1846,34 @@ class BetAmountModal(discord.ui.Modal):
             embed.add_field(name="🎮 Session Games", value=f"{len(casino_data['session_games'])}", inline=True)
             embed.set_footer(text="♠️ BlackJack Casino | Choose your outcome")
             await interaction.response.edit_message(embed=embed, view=view)
+        except ValueError:
+            await interaction.response.send_message("❌ Please enter a valid number for the amount!", ephemeral=True)
+
+class SideBetAmountModal(discord.ui.Modal):
+    def __init__(self, bet_type):
+        super().__init__(title=f"💰 Enter {bet_type} Bet Amount")
+        self.bet_type = bet_type
+        self.amount_input = discord.ui.TextInput(label="Enter side bet amount", placeholder="e.g., 50", required=True, max_length=10)
+        self.add_item(self.amount_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            amount = int(self.amount_input.value.replace('₹', '').replace(',', ''))
+            if amount <= 0:
+                await interaction.response.send_message("❌ Amount must be a positive number!", ephemeral=True)
+                return
+            if amount > casino_data["balance"]:
+                await interaction.response.send_message("❌ Amount cannot be greater than current balance!", ephemeral=True)
+                return
+            if self.bet_type == "Perfect Pair":
+                SideBetView.perfect_pair_bet = amount
+            elif self.bet_type == "21 + 3":
+                SideBetView.twentyone_plus_three_bet = amount
+            elif self.bet_type == "Dealer Bust":
+                SideBetView.dealer_bust_bet = amount
+
+            await interaction.response.send_message(f"{self.bet_type} side bet set to ₹{amount:,}", ephemeral=True)
+
         except ValueError:
             await interaction.response.send_message("❌ Please enter a valid number for the amount!", ephemeral=True)
 
@@ -1762,6 +1893,7 @@ async def casino_command(ctx):
         view.play_game.disabled = False
         view.skip_game.disabled = False
         view.end_session.disabled = False
+        view.cash_out.disabled = False
         embed = discord.Embed(title="🎰 BlackJack Casino - Session Active", description="**🎲 Welcome back to your active session!**", color=0x00ff00)
         embed.add_field(name="💰 Current Balance", value=f"₹{casino_data['balance']:,}", inline=True)
         embed.add_field(name="🎮 Session Games", value=f"{len(casino_data['session_games'])}", inline=True)
@@ -1774,6 +1906,22 @@ async def casino_command(ctx):
     embed.set_thumbnail(url="https://i.imgur.com/8z2d5c8.png")
     await ctx.send(embed=embed, view=view)
 
+# Adding side bets to casino
+@bot.command(name='sidebets')
+@has_moderator_role()
+async def sidebets_command(ctx):
+    # This command starts the casino interface
+    try: await ctx.message.delete()
+    except discord.Forbidden: pass
+
+    view = SideBetView()
+
+    embed = discord.Embed(title="🎰 BlackJack Casino - Side Bets", description="**Enable side bets for this session!**", color=0xffd700)
+    embed.add_field(name="🎲 How it Works", value="1️⃣ Enable side bets before starting a game\n2️⃣ If side bet wins, you get extra payout\n3️⃣ If side bet loses, you lose the bet amount", inline=False)
+
+    embed.set_footer(text="♠️ BlackJack Casino | Side Bets")
+    embed.set_thumbnail(url="https://i.imgur.com/8z2d5c8.png")
+    await ctx.send(embed=embed, view=view)
 
 # <<< FIX: This on_ready event is crucial for persistent views to work after a bot restart.
 @bot.event
@@ -1786,16 +1934,9 @@ async def on_ready():
     bot.add_view(CloseTicketView())
     bot.add_view(HelpView())
     bot.add_view(CasinoView())
-    bot.add_view(GameView())
-    print("Persistent views added for ticket system, help panel, and casino!")
-
-
-# --- Add these commands to your bot setup ---
-# bot.add_command(casino_command)
-# # Add other commands and their error handlers here
-#
-# TOKEN = os.getenv('DISCORD_TOKEN')
-# bot.run(TOKEN)
+    bot.add_view(SideBetView())
+    bot.add_view(GameView(0))  # Default instance
+    print("Persistent views added for ticket system, help panel, and enhanced casino!")
 
 # =================================================================================================
 # RUN THE BOT
