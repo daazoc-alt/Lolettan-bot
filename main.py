@@ -1348,16 +1348,8 @@ class CasinoView(discord.ui.View):
         if not casino_data["session_active"]:
             await interaction.response.send_message("❌ No active session! Start a session first.", ephemeral=True)
             return
-        view = GameView()
-        embed = discord.Embed(
-            title="🎲 BlackJack Game",
-            description="**Choose your game outcome:**\n\n🟢 **WIN** - You won this round!\n🔴 **LOSE** - You lost this round!\n🟡 **TIE** - Push/Draw (no money change)",
-            color=0xffd700
-        )
-        embed.add_field(name="💰 Current Balance", value=f"₹{casino_data['balance']:,}", inline=True)
-        embed.add_field(name="🎮 Session Games", value=f"{len(casino_data['session_games'])}", inline=True)
-        embed.set_footer(text="♠️ BlackJack Casino | Choose WIN or LOSE")
-        await interaction.response.edit_message(embed=embed, view=view)
+        modal = BetAmountModal()
+        await interaction.response.send_modal(modal)
 
     @discord.ui.button(label='⏸️ Skip', style=discord.ButtonStyle.secondary, custom_id='skip_game', disabled=True)
     async def skip_game(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1631,27 +1623,49 @@ class CasinoView(discord.ui.View):
             raise e
 
 class GameView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, bet_amount):
         # <<< FIX: Set timeout to None to make the view persistent.
         super().__init__(timeout=None)
+        self.bet_amount = bet_amount
 
     @discord.ui.button(label='🟢 WIN', style=discord.ButtonStyle.success, custom_id='game_win')
     async def game_win(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(AmountModal(outcome="win"))
+        await self.record_game(interaction, "win", self.bet_amount)
 
     @discord.ui.button(label='🔴 LOSE', style=discord.ButtonStyle.danger, custom_id='game_lose')
     async def game_lose(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(AmountModal(outcome="lose"))
+        await self.record_game(interaction, "lose", self.bet_amount)
 
     @discord.ui.button(label='🟡 TIE', style=discord.ButtonStyle.secondary, custom_id='game_tie')
     async def game_tie(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Record tie game with amount as 0 and no balance change
-        game_data = {"outcome": "tie", "amount": 0, "timestamp": datetime.now().isoformat()}
+        await self.record_game(interaction, "tie", 0)
+
+    async def record_game(self, interaction, outcome, amount):
+        # Record the game
+        game_data = {"outcome": outcome, "amount": amount, "timestamp": datetime.now().isoformat()}
         casino_data["session_games"].append(game_data)
         casino_data["games"].append(game_data)
-        
-        # No balance change for tie
-        
+
+        # Update balance based on outcome
+        if outcome == "win":
+            casino_data["balance"] += amount
+            balance_change = f"+₹{amount:,}"
+            color = 0x00ff00
+            outcome_text = "🟢 WIN"
+            description = f"**{outcome_text}**\n\n**Bet Amount:** ₹{amount:,}\n**Balance Change:** {balance_change}"
+        elif outcome == "lose":
+            casino_data["balance"] -= amount
+            balance_change = f"-₹{amount:,}"
+            color = 0xff0000
+            outcome_text = "🔴 LOSE"
+            description = f"**{outcome_text}**\n\n**Bet Amount:** ₹{amount:,}\n**Balance Change:** {balance_change}"
+        else:  # tie
+            balance_change = "No change"
+            color = 0xffaa00
+            outcome_text = "🟡 TIE"
+            description = f"**{outcome_text}**\n\n**No money gainedor lost**\n**Balance Change:** {balance_change}"
+
+        # Create return view
         view = CasinoView()
         view.play_game.disabled = False
         view.skip_game.disabled = False
@@ -1659,12 +1673,13 @@ class GameView(discord.ui.View):
 
         embed = discord.Embed(
             title="🎰 BlackJack Casino - Game Recorded!",
-            description=f"**🟡 TIE**\n\n**No money gained or lost**\n**Balance Change:** No change",
-            color=0xffaa00
+            description=description,
+            color=color
         )
-        embed.add_field(name="💰 Current Balance", value=f"₹{casino_data['balance']:,}", inline=True)
+        embed.add_field(name="💰 New Balance", value=f"₹{casino_data['balance']:,}", inline=True)
         embed.add_field(name="🎮 Session Games", value=f"{len(casino_data['session_games'])}", inline=True)
         embed.add_field(name="⏱️ Session Duration", value=f"{get_session_duration()}", inline=True)
+        
         wins = sum(1 for g in casino_data['session_games'] if g['outcome'] == 'win')
         losses = sum(1 for g in casino_data['session_games'] if g['outcome'] == 'lose')
         ties = sum(1 for g in casino_data['session_games'] if g['outcome'] == 'tie')
@@ -1704,42 +1719,29 @@ class BalanceModal(discord.ui.Modal):
         except ValueError:
             await interaction.response.send_message("❌ Please enter a valid number for the balance!", ephemeral=True)
 
-class AmountModal(discord.ui.Modal):
-    def __init__(self, outcome):
-        super().__init__(title=f"💰 Enter Bet Amount - {'WIN' if outcome == 'win' else 'LOSE'}")
-        self.outcome = outcome
-        self.amount_input = discord.ui.TextInput(label=f"Enter bet amount for this {'WIN' if outcome == 'win' else 'LOSS'}", placeholder="e.g., 100", required=True, max_length=10)
+class BetAmountModal(discord.ui.Modal):
+    def __init__(self):
+        super().__init__(title="💰 Enter Bet Amount")
+        self.amount_input = discord.ui.TextInput(label="Enter your bet amount", placeholder="e.g., 100", required=True, max_length=10)
         self.add_item(self.amount_input)
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            amount = int(self.amount_input.value.replace('$', '').replace(',', ''))
+            amount = int(self.amount_input.value.replace('₹', '').replace(',', ''))
             if amount <= 0:
                 await interaction.response.send_message("❌ Amount must be a positive number!", ephemeral=True)
                 return
-            game_data = {"outcome": self.outcome, "amount": amount, "timestamp": datetime.now().isoformat()}
-            casino_data["session_games"].append(game_data)
-            casino_data["games"].append(game_data)
-
-            balance_change = amount if self.outcome == "win" else -amount
-            casino_data["balance"] += balance_change
-
-            view = CasinoView()
-            view.play_game.disabled = False
-            view.skip_game.disabled = False
-            view.end_session.disabled = False
-
+            
+            # Create game view with the bet amount
+            view = GameView(bet_amount=amount)
             embed = discord.Embed(
-                title="🎰 BlackJack Casino - Game Recorded!",
-                description=f"**{'🟢 WIN' if self.outcome == 'win' else '🔴 LOSE'}**\n\n**Bet Amount:** ₹{amount:,}\n**Balance Change:** {f'+₹{amount:,}' if self.outcome == 'win' else f'-₹{amount:,}'}",
-                color=0x00ff00 if self.outcome == "win" else 0xff0000
+                title="🎲 BlackJack Game",
+                description=f"**Choose your game outcome:**\n\n🟢 **WIN** - You won this round!\n🔴 **LOSE** - You lost this round!\n🟡 **TIE** - Push/Draw (no money change)\n\n💰 **Bet Amount:** ₹{amount:,}",
+                color=0xffd700
             )
-            embed.add_field(name="💰 New Balance", value=f"₹{casino_data['balance']:,}", inline=True)
+            embed.add_field(name="💰 Current Balance", value=f"₹{casino_data['balance']:,}", inline=True)
             embed.add_field(name="🎮 Session Games", value=f"{len(casino_data['session_games'])}", inline=True)
-            embed.add_field(name="⏱️ Session Duration", value=f"{get_session_duration()}", inline=True)
-            wins = sum(1 for g in casino_data['session_games'] if g['outcome'] == 'win')
-            embed.add_field(name="📊 Session Stats", value=f"Wins: {wins} | Losses: {len(casino_data['session_games']) - wins}", inline=False)
-            embed.set_footer(text="♠️ BlackJack Casino | Choose your next action")
+            embed.set_footer(text="♠️ BlackJack Casino | Choose your outcome")
             await interaction.response.edit_message(embed=embed, view=view)
         except ValueError:
             await interaction.response.send_message("❌ Please enter a valid number for the amount!", ephemeral=True)
