@@ -1334,7 +1334,7 @@ def get_session_duration():
 
 class CasinoView(discord.ui.View):
     def __init__(self):
-        # <<< FIX: Set timeout to None to make the view persistent for long sessions.
+        # Set timeout to None to make the view persistent for long sessions (up to 4+ hours)
         super().__init__(timeout=None)
 
     @discord.ui.button(label='💰 Start Session', style=discord.ButtonStyle.green, custom_id='start_session')
@@ -1386,9 +1386,15 @@ class CasinoView(discord.ui.View):
         if not casino_data["session_active"]:
             await interaction.response.send_message("❌ No active session to end!", ephemeral=True)
             return
-        # <<< FIX: Defer immediately to handle slow chart generation.
-        await interaction.response.defer()
-        await self.generate_session_report(interaction)
+        
+        # Defer the interaction immediately to prevent timeout during chart generation
+        await interaction.response.defer(ephemeral=False)
+        
+        try:
+            await self.generate_session_report(interaction)
+        except Exception as e:
+            print(f"Error generating session report: {e}")
+            await interaction.followup.send("❌ An error occurred while generating the session report. Please try again.", ephemeral=True)
 
     async def generate_session_report(self, interaction: discord.Interaction):
         session_games = casino_data["session_games"]
@@ -1396,6 +1402,7 @@ class CasinoView(discord.ui.View):
             await interaction.followup.send("❌ No games played in this session!", ephemeral=True)
             return
 
+        # Calculate comprehensive statistics
         total_games = len(session_games)
         wins = sum(1 for game in session_games if game["outcome"] == "win")
         losses = total_games - wins
@@ -1404,60 +1411,215 @@ class CasinoView(discord.ui.View):
         total_won = sum(game["amount"] for game in session_games if game["outcome"] == "win")
         total_lost = sum(game["amount"] for game in session_games if game["outcome"] == "lose")
         net_profit = total_won - total_lost
-        chart_file = self.create_game_chart(session_games)
+        
+        # Calculate additional statistics
+        avg_bet = total_bet / total_games if total_games > 0 else 0
+        biggest_win = max([g["amount"] for g in session_games if g["outcome"] == "win"], default=0)
+        biggest_loss = max([g["amount"] for g in session_games if g["outcome"] == "lose"], default=0)
+        
+        # Calculate win/loss streaks
+        current_streak = 0
+        max_win_streak = 0
+        max_loss_streak = 0
+        temp_win_streak = 0
+        temp_loss_streak = 0
+        
+        for game in session_games:
+            if game["outcome"] == "win":
+                temp_win_streak += 1
+                temp_loss_streak = 0
+                max_win_streak = max(max_win_streak, temp_win_streak)
+            else:
+                temp_loss_streak += 1
+                temp_win_streak = 0
+                max_loss_streak = max(max_loss_streak, temp_loss_streak)
+        
+        # Generate chart with error handling
+        chart_file = None
+        try:
+            chart_file = self.create_game_chart(session_games)
+        except Exception as e:
+            print(f"Error creating chart: {e}")
 
-        embed = discord.Embed(title="📊 BlackJack Session Report", description="**🎰 Complete session analysis and statistics**", color=0xffd700)
-        embed.add_field(name="⏱️ Session Overview", value=f"**Duration:** {get_session_duration()}\n**Games Played:** {total_games}\n**Final Balance:** ${casino_data['balance']:,}", inline=True)
-        embed.add_field(name="🎯 Performance Stats", value=f"**Wins:** {wins} 🟢\n**Losses:** {losses} 🔴\n**Win Rate:** {win_rate:.1f}%", inline=True)
-        embed.add_field(name="💰 Financial Summary", value=f"**Total Bet:** ${total_bet:,}\n**Net Profit:** ${net_profit:+,}\n**Profit Margin:** {((net_profit/total_bet)*100) if total_bet > 0 else 0:.1f}%", inline=True)
+        # Create detailed embed report
+        embed = discord.Embed(
+            title="📊 BlackJack Session Report - Complete Analysis", 
+            description="**🎰 Comprehensive session statistics and performance analysis**", 
+            color=0xffd700
+        )
         
-        recent_games = session_games[-5:]
-        recent_text = "".join([f"`Game {len(session_games)-len(recent_games)+i}:` {'🟢' if g['outcome'] == 'win' else '🔴'} ${g['amount']:,}\n" for i, g in enumerate(recent_games, 1)])
-        embed.add_field(name="🎮 Recent Games", value=recent_text if recent_text else "No games played", inline=False)
+        # Session Overview
+        embed.add_field(
+            name="⏱️ Session Overview", 
+            value=f"**Duration:** {get_session_duration()}\n**Games Played:** {total_games}\n**Starting Balance:** ${casino_data.get('starting_balance', 'Unknown'):,}\n**Final Balance:** ${casino_data['balance']:,}", 
+            inline=True
+        )
         
-        analysis = "💪 **Tough session!** Better luck next time!"
-        if win_rate >= 60: analysis = "🔥 **Excellent session!** You're on fire!"
-        elif win_rate >= 50: analysis = "✨ **Good session!** Keep up the momentum!"
-        elif win_rate >= 40: analysis = "📈 **Decent session!** Room for improvement!"
-        embed.add_field(name="📈 Performance Analysis", value=analysis, inline=False)
-        embed.set_footer(text="♠️ BlackJack Casino | Session Complete")
+        # Performance Statistics
+        embed.add_field(
+            name="🎯 Performance Stats", 
+            value=f"**Wins:** {wins} 🟢\n**Losses:** {losses} 🔴\n**Win Rate:** {win_rate:.1f}%\n**Avg Bet:** ${avg_bet:.2f}", 
+            inline=True
+        )
+        
+        # Financial Summary
+        embed.add_field(
+            name="💰 Financial Summary", 
+            value=f"**Total Bet:** ${total_bet:,}\n**Total Won:** ${total_won:,}\n**Total Lost:** ${total_lost:,}\n**Net Profit:** ${net_profit:+,}", 
+            inline=True
+        )
+        
+        # Betting Statistics
+        embed.add_field(
+            name="📈 Betting Analysis",
+            value=f"**Biggest Win:** ${biggest_win:,}\n**Biggest Loss:** ${biggest_loss:,}\n**Profit Margin:** {((net_profit/total_bet)*100) if total_bet > 0 else 0:.1f}%\n**ROI:** {((net_profit/total_bet)*100) if total_bet > 0 else 0:.1f}%",
+            inline=True
+        )
+        
+        # Streak Analysis
+        embed.add_field(
+            name="🔥 Streak Analysis",
+            value=f"**Max Win Streak:** {max_win_streak} games\n**Max Loss Streak:** {max_loss_streak} games\n**Current Form:** {'🟢 Winning' if session_games[-1]['outcome'] == 'win' else '🔴 Losing' if session_games else 'N/A'}",
+            inline=True
+        )
+        
+        # Game History (last 10 games)
+        recent_games = session_games[-10:]
+        recent_text = ""
+        for i, g in enumerate(recent_games):
+            game_num = len(session_games) - len(recent_games) + i + 1
+            recent_text += f"`Game {game_num}:` {'🟢 WIN' if g['outcome'] == 'win' else '🔴 LOSE'} ${g['amount']:,}\n"
+        
+        embed.add_field(
+            name="🎮 Recent Game History (Last 10)", 
+            value=recent_text if recent_text else "No games played", 
+            inline=False
+        )
+        
+        # Performance Analysis with detailed notes
+        if win_rate >= 70:
+            analysis = "🔥 **EXCEPTIONAL SESSION!** Outstanding performance! You're dominating the tables!"
+            notes = "• Maintain this winning momentum\n• Consider increasing bet sizes during hot streaks\n• Your strategy is working perfectly"
+        elif win_rate >= 60:
+            analysis = "✨ **EXCELLENT SESSION!** Great job! You're playing like a pro!"
+            notes = "• Strong performance above average\n• Keep following your current strategy\n• Watch for any pattern changes"
+        elif win_rate >= 50:
+            analysis = "📈 **GOOD SESSION!** Solid performance! You're beating the house!"
+            notes = "• Positive results, stay consistent\n• Monitor your betting patterns\n• Small adjustments can improve further"
+        elif win_rate >= 40:
+            analysis = "⚖️ **DECENT SESSION!** Close to break-even with room for improvement!"
+            notes = "• Analyze your losing streaks\n• Consider adjusting bet sizing\n• Review your decision patterns"
+        else:
+            analysis = "💪 **TOUGH SESSION!** Every player faces challenges - learn and improve!"
+            notes = "• Review what went wrong\n• Consider taking a break\n• Analyze your strategy for improvements"
+        
+        embed.add_field(name="📊 Performance Analysis", value=analysis, inline=False)
+        embed.add_field(name="📝 Session Notes & Recommendations", value=notes, inline=False)
+        
+        # Add timestamp
+        from datetime import datetime
+        embed.add_field(
+            name="🕐 Session Completed", 
+            value=f"<t:{int(datetime.now().timestamp())}:F>", 
+            inline=False
+        )
+        
+        embed.set_footer(text="♠️ BlackJack Casino | Professional Statistics Tracker | Session Complete")
         embed.set_thumbnail(url="https://i.imgur.com/8z2d5c8.png")
 
+        # Reset session data
         casino_data["session_active"] = False
         casino_data["session_start"] = None
         casino_data["session_games"] = []
         
-        # <<< FIX: Use edit_original_response with 'attachments' after deferring.
-        await interaction.edit_original_response(embed=embed, view=CasinoView(), attachments=[chart_file])
+        # Send the report with or without chart
+        try:
+            if chart_file:
+                await interaction.edit_original_response(embed=embed, view=CasinoView(), attachments=[chart_file])
+            else:
+                await interaction.edit_original_response(embed=embed, view=CasinoView())
+        except Exception as e:
+            print(f"Error sending session report: {e}")
+            # Fallback to followup if edit fails
+            if chart_file:
+                await interaction.followup.send(embed=embed, view=CasinoView(), file=chart_file)
+            else:
+                await interaction.followup.send(embed=embed, view=CasinoView())
 
     def create_game_chart(self, games):
-        plt.style.use('dark_background')
-        fig, ax = plt.subplots(figsize=(12, 6))
-        fig.patch.set_facecolor('#2f3136')
-        ax.set_facecolor('#36393f')
-        game_numbers = list(range(1, len(games) + 1))
-        outcomes = [1 if g["outcome"] == "win" else -1 for g in games]
-        amounts = [g["amount"] for g in games]
-        running_profit = [sum(g["amount"] * (1 if g["outcome"] == "win" else -1) for g in games[:i+1]) for i in range(len(games))]
-        colors = ['#00ff41' if o == 1 else '#ff4757' for o in outcomes]
-        ax.bar(game_numbers, amounts, color=colors, alpha=0.7, edgecolor='white', linewidth=0.5)
-        ax2 = ax.twinx()
-        ax2.plot(game_numbers, running_profit, color='#ffd700', linewidth=3, marker='o', markersize=4, label='Net Profit')
-        ax2.axhline(0, color='white', linestyle='--', linewidth=1, alpha=0.5)
-        ax.set_xlabel('Game Number', color='white', fontweight='bold')
-        ax.set_ylabel('Bet Amount ($)', color='white', fontweight='bold')
-        ax.set_title('🎰 BlackJack Session - Game History & Profit Trend', color='#ffd700', fontsize=16, fontweight='bold', pad=20)
-        ax2.set_ylabel('Session Net Profit ($)', color='#ffd700', fontweight='bold')
-        from matplotlib.patches import Patch
-        legend_elements = [Patch(facecolor='#00ff41', label='Win'), Patch(facecolor='#ff4757', label='Loss'), plt.Line2D([0], [0], color='#ffd700', lw=3, label='Net Profit')]
-        ax.legend(handles=legend_elements, loc='upper left')
-        ax.grid(True, axis='y', alpha=0.3, linestyle=':')
-        ax.set_xticks(game_numbers)
-        buffer = io.BytesIO()
-        plt.savefig(buffer, format='png', facecolor=fig.get_facecolor(), dpi=150, bbox_inches='tight')
-        buffer.seek(0)
-        plt.close(fig)
-        return discord.File(buffer, filename='blackjack_session_chart.png')
+        try:
+            plt.style.use('dark_background')
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
+            fig.patch.set_facecolor('#2f3136')
+            
+            # Prepare data
+            game_numbers = list(range(1, len(games) + 1))
+            outcomes = [1 if g["outcome"] == "win" else -1 for g in games]
+            amounts = [g["amount"] for g in games]
+            running_profit = [sum(g["amount"] * (1 if g["outcome"] == "win" else -1) for g in games[:i+1]) for i in range(len(games))]
+            colors = ['#00ff41' if o == 1 else '#ff4757' for o in outcomes]
+            
+            # Top chart - Bet amounts and outcomes
+            ax1.set_facecolor('#36393f')
+            bars = ax1.bar(game_numbers, amounts, color=colors, alpha=0.7, edgecolor='white', linewidth=0.5)
+            ax1.set_xlabel('Game Number', color='white', fontweight='bold')
+            ax1.set_ylabel('Bet Amount ($)', color='white', fontweight='bold')
+            ax1.set_title('🎰 BlackJack Session - Individual Game Results', color='#ffd700', fontsize=14, fontweight='bold', pad=15)
+            ax1.grid(True, axis='y', alpha=0.3, linestyle=':')
+            
+            # Add value labels on bars for clarity
+            for bar, amount in zip(bars, amounts):
+                height = bar.get_height()
+                ax1.text(bar.get_x() + bar.get_width()/2., height + max(amounts)*0.01,
+                        f'${amount:,}', ha='center', va='bottom', color='white', fontsize=8)
+            
+            # Bottom chart - Running profit trend
+            ax2.set_facecolor('#36393f')
+            line = ax2.plot(game_numbers, running_profit, color='#ffd700', linewidth=3, marker='o', markersize=6, label='Net Profit')
+            ax2.axhline(0, color='white', linestyle='--', linewidth=2, alpha=0.7)
+            ax2.fill_between(game_numbers, running_profit, 0, where=[p >= 0 for p in running_profit], 
+                           color='#00ff41', alpha=0.3, interpolate=True, label='Profit Zone')
+            ax2.fill_between(game_numbers, running_profit, 0, where=[p < 0 for p in running_profit], 
+                           color='#ff4757', alpha=0.3, interpolate=True, label='Loss Zone')
+            ax2.set_xlabel('Game Number', color='white', fontweight='bold')
+            ax2.set_ylabel('Session Net Profit ($)', color='white', fontweight='bold')
+            ax2.set_title('📈 Cumulative Profit/Loss Trend', color='#ffd700', fontsize=14, fontweight='bold', pad=15)
+            ax2.grid(True, alpha=0.3, linestyle=':')
+            ax2.legend(loc='upper left')
+            
+            # Add statistics text box
+            total_games = len(games)
+            wins = sum(1 for g in games if g["outcome"] == "win")
+            win_rate = (wins / total_games) * 100 if total_games > 0 else 0
+            final_profit = running_profit[-1] if running_profit else 0
+            
+            stats_text = f'📊 Session Stats:\nGames: {total_games} | Wins: {wins} | Win Rate: {win_rate:.1f}%\nFinal P&L: ${final_profit:+,}'
+            ax2.text(0.02, 0.98, stats_text, transform=ax2.transAxes, fontsize=10,
+                    verticalalignment='top', bbox=dict(boxstyle='round', facecolor='#36393f', alpha=0.8),
+                    color='white')
+            
+            # Set x-axis ticks
+            if len(game_numbers) <= 50:
+                ax1.set_xticks(game_numbers[::max(1, len(game_numbers)//20)])
+                ax2.set_xticks(game_numbers[::max(1, len(game_numbers)//20)])
+            else:
+                ax1.set_xticks(game_numbers[::max(1, len(game_numbers)//20)])
+                ax2.set_xticks(game_numbers[::max(1, len(game_numbers)//20)])
+            
+            plt.tight_layout()
+            
+            # Save to buffer
+            buffer = io.BytesIO()
+            plt.savefig(buffer, format='png', facecolor=fig.get_facecolor(), dpi=150, bbox_inches='tight')
+            buffer.seek(0)
+            plt.close(fig)
+            
+            return discord.File(buffer, filename='blackjack_detailed_session_chart.png')
+            
+        except Exception as e:
+            print(f"Error creating chart: {e}")
+            plt.close('all')  # Clean up any remaining figures
+            raise e
 
 class GameView(discord.ui.View):
     def __init__(self):
@@ -1484,7 +1646,13 @@ class BalanceModal(discord.ui.Modal):
             if balance <= 0:
                 await interaction.response.send_message("❌ Balance must be a positive number!", ephemeral=True)
                 return
-            casino_data.update({"balance": balance, "session_active": True, "session_start": datetime.now(), "session_games": []})
+            casino_data.update({
+                "balance": balance, 
+                "starting_balance": balance,  # Store starting balance for reporting
+                "session_active": True, 
+                "session_start": datetime.now(), 
+                "session_games": []
+            })
             view = CasinoView()
             view.play_game.disabled = False
             view.skip_game.disabled = False
@@ -1542,8 +1710,8 @@ class AmountModal(discord.ui.Modal):
 # BOT COMMANDS AND SETUP
 # =================================================================================================
 
-# @bot.command(name='casino', aliases=['blackjack', 'bj'])
-# @has_moderator_role()
+@bot.command(name='casino', aliases=['blackjack', 'bj'])
+@has_moderator_role()
 async def casino_command(ctx):
     # This command starts the casino interface
     try: await ctx.message.delete()
@@ -1568,13 +1736,18 @@ async def casino_command(ctx):
 
 
 # <<< FIX: This on_ready event is crucial for persistent views to work after a bot restart.
-# @bot.event
+@bot.event
 async def on_ready():
-    # Add persistent views so they work after a restart
+    """Prints a message to the console when the bot is online and adds persistent views."""
+    print(f'Bot {bot.user} is online and ready! 🚀')
+
+    # Add persistent views
+    bot.add_view(TicketView())
+    bot.add_view(CloseTicketView())
+    bot.add_view(HelpView())
     bot.add_view(CasinoView())
     bot.add_view(GameView())
-    print(f'Bot is ready as {bot.user}')
-    print('Persistent casino views have been re-registered.')
+    print("Persistent views added for ticket system, help panel, and casino!")
 
 
 # --- Add these commands to your bot setup ---
