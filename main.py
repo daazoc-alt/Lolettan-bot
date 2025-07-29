@@ -1407,11 +1407,17 @@ class CasinoView(discord.ui.View):
         wins = sum(1 for game in session_games if game["outcome"] == "win")
         losses = sum(1 for game in session_games if game["outcome"] == "lose")
         ties = sum(1 for game in session_games if game["outcome"] == "tie")
+        blackjacks = sum(1 for game in session_games if game["outcome"] == "blackjack")
+        cashouts = sum(1 for game in session_games if game["outcome"] == "cashout")
+        splits = sum(1 for game in session_games if game.get("is_split", False))
+        doubles = sum(1 for game in session_games if game.get("is_double", False))
+        
         win_rate = (wins / total_games) * 100 if total_games > 0 else 0
         total_bet = sum(game["amount"] for game in session_games)
-        total_won = sum(game["amount"] for game in session_games if game["outcome"] == "win")
+        total_won = sum(game["amount"] for game in session_games if game["outcome"] in ["win", "blackjack"])
         total_lost = sum(game["amount"] for game in session_games if game["outcome"] == "lose")
-        net_profit = total_won - total_lost
+        total_side_bet_winnings = sum(game.get("side_bet_winnings", 0) for game in session_games)
+        net_profit = total_won - total_lost + total_side_bet_winnings
 
         # Calculate additional statistics
         avg_bet = total_bet / total_games if total_games > 0 else 0
@@ -1462,7 +1468,7 @@ class CasinoView(discord.ui.View):
         # Performance Statistics
         embed.add_field(
             name="🎯 Performance Stats",
-            value=f"**Wins:** {wins} 🟢\n**Losses:** {losses} 🔴\n**Ties:** {ties} 🟡\n**Win Rate:** {win_rate:.1f}%\n**Avg Bet:** ₹{avg_bet:.2f}",
+            value=f"**Wins:** {wins} 🟢\n**Losses:** {losses} 🔴\n**Ties:** {ties} 🟡\n**Blackjacks:** {blackjacks} 🂡\n**Win Rate:** {win_rate:.1f}%",
             inline=True
         )
 
@@ -1480,10 +1486,17 @@ class CasinoView(discord.ui.View):
             inline=True
         )
 
+        # Advanced Features
+        embed.add_field(
+            name="🎲 Advanced Features",
+            value=f"**Splits:** {splits} hands\n**Double Downs:** {doubles} hands\n**Cash Outs:** {cashouts} times\n**Side Bet Wins:** ₹{total_side_bet_winnings:,}",
+            inline=True
+        )
+
         # Streak Analysis
         embed.add_field(
             name="🔥 Streak Analysis",
-            value=f"**Max Win Streak:** {max_win_streak} games\n**Max Loss Streak:** {max_loss_streak} games\n**Current Form:** {'🟢 Winning' if session_games[-1]['outcome'] == 'win' else ('🔴 Losing' if session_games[-1]['outcome'] == 'lose' else '🟡 Push') if session_games else 'N/A'}",
+            value=f"**Max Win Streak:** {max_win_streak} games\n**Max Loss Streak:** {max_loss_streak} games\n**Current Form:** {'🟢 Winning' if session_games[-1]['outcome'] in ['win', 'blackjack'] else ('🔴 Losing' if session_games[-1]['outcome'] == 'lose' else '🟡 Push') if session_games else 'N/A'}",
             inline=True
         )
 
@@ -1563,10 +1576,37 @@ class CasinoView(discord.ui.View):
 
             # Prepare data
             game_numbers = list(range(1, len(games) + 1))
-            outcomes = [1 if g["outcome"] == "win" else (-1 if g["outcome"] == "lose" else 0) for g in games]
-            amounts = [g["amount"] for g in games]
-            running_profit = [sum(g["amount"] * (1 if g["outcome"] == "win" else (-1 if g["outcome"] == "lose" else 0)) for g in games[:i+1]) for i in range(len(games))]
-            colors = ['#00ff41' if o == 1 else ('#ff4757' if o == -1 else '#ffaa00') for o in outcomes]
+            outcomes = []
+            amounts = []
+            running_profit = []
+            colors = []
+            
+            cumulative_profit = 0
+            for g in games:
+                if g["outcome"] == "win":
+                    outcomes.append(1)
+                    cumulative_profit += g["amount"]
+                    colors.append('#00ff41')
+                elif g["outcome"] == "lose":
+                    outcomes.append(-1)
+                    cumulative_profit -= g["amount"]
+                    colors.append('#ff4757')
+                elif g["outcome"] == "blackjack":
+                    outcomes.append(1.5)
+                    cumulative_profit += int(g["amount"] * 1.5)
+                    colors.append('#ffd700')
+                elif g["outcome"] == "cashout":
+                    outcomes.append(0.5)
+                    cumulative_profit += g["amount"]
+                    if "lost_amount" in g:
+                        cumulative_profit -= g["lost_amount"]
+                    colors.append('#00aaff')
+                else:  # tie
+                    outcomes.append(0)
+                    colors.append('#ffaa00')
+                
+                amounts.append(g["amount"])
+                running_profit.append(cumulative_profit + g.get("side_bet_winnings", 0))
 
             # Top chart - Bet amounts and outcomes
             ax1.set_facecolor('#36393f')
@@ -1601,10 +1641,14 @@ class CasinoView(discord.ui.View):
             wins = sum(1 for g in games if g["outcome"] == "win")
             losses = sum(1 for g in games if g["outcome"] == "lose")
             ties = sum(1 for g in games if g["outcome"] == "tie")
-            win_rate = (wins / total_games) * 100 if total_games > 0 else 0
+            blackjacks = sum(1 for g in games if g["outcome"] == "blackjack")
+            cashouts = sum(1 for g in games if g["outcome"] == "cashout")
+            splits = sum(1 for g in games if g.get("is_split", False))
+            doubles = sum(1 for g in games if g.get("is_double", False))
+            win_rate = ((wins + blackjacks) / total_games) * 100 if total_games > 0 else 0
             final_profit = running_profit[-1] if running_profit else 0
 
-            stats_text = f'📊 Session Stats:\nGames: {total_games} | W: {wins} | L: {losses} | T: {ties} | Win Rate: {win_rate:.1f}%\nFinal P&L: ₹{final_profit:+,}'
+            stats_text = f'📊 Session Stats:\nGames: {total_games} | W: {wins} | L: {losses} | T: {ties} | BJ: {blackjacks}\nSplit: {splits} | Double: {doubles} | Cash: {cashouts} | Win Rate: {win_rate:.1f}%\nFinal P&L: ₹{final_profit:+,}'
             ax2.text(0.02, 0.98, stats_text, transform=ax2.transAxes, fontsize=10,
                     verticalalignment='top', bbox=dict(boxstyle='round', facecolor='#36393f', alpha=0.8),
                     color='white')
@@ -1633,10 +1677,16 @@ class CasinoView(discord.ui.View):
             raise e
 
 class GameView(discord.ui.View):
-    def __init__(self, bet_amount):
-        # <<< FIX: Set timeout to None to make the view persistent.
+    def __init__(self, bet_amount, side_bets=None, is_split=False, is_double=False):
         super().__init__(timeout=None)
         self.bet_amount = bet_amount
+        self.side_bets = side_bets or {}
+        self.is_split = is_split
+        self.is_double = is_double
+        
+        if is_split:
+            # For split hands, we need to track which hand we're on
+            self.split_hands_completed = getattr(casino_data, 'split_hands_completed', 0)
 
     @discord.ui.button(label='🟢 WIN', style=discord.ButtonStyle.success, custom_id='game_win')
     async def game_win(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1654,9 +1704,83 @@ class GameView(discord.ui.View):
     async def game_blackjack(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.record_game(interaction, "blackjack", self.bet_amount)
 
+    @discord.ui.button(label='💵 CASH OUT', style=discord.ButtonStyle.success, custom_id='game_cashout')
+    async def game_cashout(self, interaction: discord.Interaction, button: discord.ui.Button):
+        modal = GameCashOutModal(self.bet_amount)
+        await interaction.response.send_modal(modal)
+
+    @discord.ui.button(label='🧩 SPLIT', style=discord.ButtonStyle.secondary, custom_id='game_split')
+    async def game_split(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if casino_data["balance"] < self.bet_amount:
+            await interaction.response.send_message("❌ Insufficient balance to split!", ephemeral=True)
+            return
+        
+        # Start split sequence
+        casino_data["balance"] -= self.bet_amount  # Double the bet
+        casino_data['split_hands_completed'] = 0
+        
+        embed = discord.Embed(
+            title="🧩 Split Hand - First Hand",
+            description=f"**Playing first hand of split**\n\n**Each Hand Bet:** ₹{self.bet_amount:,}\n**Total Bet:** ₹{self.bet_amount * 2:,}",
+            color=0x00aaff
+        )
+        embed.add_field(name="💰 Current Balance", value=f"₹{casino_data['balance']:,}", inline=True)
+        embed.set_footer(text="♠️ BlackJack Casino | Split Hand 1/2")
+        
+        view = GameView(self.bet_amount, self.side_bets, is_split=True)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    @discord.ui.button(label='🔁 DOUBLE', style=discord.ButtonStyle.secondary, custom_id='game_double')
+    async def game_double(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if casino_data["balance"] < self.bet_amount:
+            await interaction.response.send_message("❌ Insufficient balance to double down!", ephemeral=True)
+            return
+        
+        # Double the bet
+        casino_data["balance"] -= self.bet_amount
+        doubled_amount = self.bet_amount * 2
+        
+        embed = discord.Embed(
+            title="🔁 Double Down",
+            description=f"**Bet doubled! Choose outcome:**\n\n**Original Bet:** ₹{self.bet_amount:,}\n**Total Bet:** ₹{doubled_amount:,}",
+            color=0xff9900
+        )
+        embed.add_field(name="💰 Current Balance", value=f"₹{casino_data['balance']:,}", inline=True)
+        embed.set_footer(text="♠️ BlackJack Casino | Double Down")
+        
+        view = GameView(doubled_amount, self.side_bets, is_double=True)
+        await interaction.response.edit_message(embed=embed, view=view)
+
     async def record_game(self, interaction, outcome, amount):
-        # Record the game
-        game_data = {"outcome": outcome, "amount": amount, "timestamp": datetime.now().isoformat()}
+        # Process side bets first
+        side_bet_winnings = 0
+        side_bet_text = ""
+        
+        if self.side_bets:
+            for bet_type, bet_amount in self.side_bets.items():
+                if bet_amount > 0:
+                    # For demo purposes, 30% chance side bet wins
+                    import random
+                    if random.choice([True, False, False, False]):  # 25% chance
+                        multiplier = {"Perfect Pair": 5, "21 + 3": 10, "Dealer Bust": 30}.get(bet_type, 5)
+                        side_bet_win = bet_amount * multiplier
+                        casino_data["balance"] += side_bet_win
+                        side_bet_winnings += side_bet_win
+                        side_bet_text += f"🎉 {bet_type} WON: +₹{side_bet_win:,}\n"
+                    else:
+                        casino_data["balance"] -= bet_amount
+                        side_bet_text += f"❌ {bet_type} LOST: -₹{bet_amount:,}\n"
+
+        # Record the main game
+        game_data = {
+            "outcome": outcome, 
+            "amount": amount, 
+            "timestamp": datetime.now().isoformat(),
+            "side_bets": self.side_bets,
+            "side_bet_winnings": side_bet_winnings,
+            "is_split": self.is_split,
+            "is_double": self.is_double
+        }
         casino_data["session_games"].append(game_data)
         casino_data["games"].append(game_data)
 
@@ -1666,24 +1790,49 @@ class GameView(discord.ui.View):
             balance_change = f"+₹{amount:,}"
             color = 0x00ff00
             outcome_text = "🟢 WIN"
-            description = f"**{outcome_text}**\n\n**Bet Amount:** ₹{amount:,}\n**Balance Change:** {balance_change}"
         elif outcome == "lose":
             casino_data["balance"] -= amount
             balance_change = f"-₹{amount:,}"
             color = 0xff0000
             outcome_text = "🔴 LOSE"
-            description = f"**{outcome_text}**\n\n**Bet Amount:** ₹{amount:,}\n**Balance Change:** {balance_change}"
         elif outcome == "tie":
-            balance_change = "No change"
+            balance_change = "₹0 (Push)"
             color = 0xffaa00
             outcome_text = "🟡 TIE"
-            description = f"**{outcome_text}**\n\n**No money gainedor lost**\n**Balance Change:** {balance_change}"
         elif outcome == "blackjack":
-             casino_data["balance"] += amount * 1.5
-             balance_change = f"+₹{amount * 1.5:,}"
-             color = 0x00ff00
-             outcome_text = "🂡 BLACKJACK"
-             description = f"**{outcome_text}**\n\n**Bet Amount:** ₹{amount:,}\n**Balance Change:** {balance_change}"
+            payout = int(amount * 1.5)
+            casino_data["balance"] += payout
+            balance_change = f"+₹{payout:,}"
+            color = 0x00ff00
+            outcome_text = "🂡 BLACKJACK"
+
+        # Handle split hands
+        if self.is_split:
+            casino_data['split_hands_completed'] += 1
+            if casino_data['split_hands_completed'] < 2:
+                # Still need to play second hand
+                embed = discord.Embed(
+                    title="🧩 Split Hand - Second Hand",
+                    description=f"**{outcome_text}** (Hand 1)\n\n**Playing second hand of split**\n**Hand Bet:** ₹{self.bet_amount:,}",
+                    color=0x00aaff
+                )
+                embed.add_field(name="💰 Current Balance", value=f"₹{casino_data['balance']:,}", inline=True)
+                embed.set_footer(text="♠️ BlackJack Casino | Split Hand 2/2")
+                
+                view = GameView(self.bet_amount, self.side_bets, is_split=True)
+                await interaction.response.edit_message(embed=embed, view=view)
+                return
+
+        description = f"**{outcome_text}**\n\n**Bet Amount:** ₹{amount:,}\n**Balance Change:** {balance_change}"
+        
+        if side_bet_text:
+            description += f"\n\n**Side Bets:**\n{side_bet_text}"
+        
+        if self.is_split:
+            description += f"\n\n**Split Complete** - Both hands played"
+        
+        if self.is_double:
+            description += f"\n\n**Double Down** - Bet was doubled"
 
         # Create return view
         view = CasinoView()
@@ -1705,7 +1854,11 @@ class GameView(discord.ui.View):
         losses = sum(1 for g in casino_data['session_games'] if g['outcome'] == 'lose')
         ties = sum(1 for g in casino_data['session_games'] if g['outcome'] == 'tie')
         blackjacks = sum(1 for g in casino_data['session_games'] if g['outcome'] == 'blackjack')
-        embed.add_field(name="📊 Session Stats", value=f"Wins: {wins} | Losses: {losses} | Ties: {ties} | Blackjacks: {blackjacks}", inline=False)
+        splits = sum(1 for g in casino_data['session_games'] if g.get('is_split', False))
+        doubles = sum(1 for g in casino_data['session_games'] if g.get('is_double', False))
+        cashouts = sum(1 for g in casino_data['session_games'] if g['outcome'] == 'cashout')
+        
+        embed.add_field(name="📊 Session Stats", value=f"W: {wins} | L: {losses} | T: {ties} | BJ: {blackjacks} | Split: {splits} | Double: {doubles} | Cash: {cashouts}", inline=False)
         embed.set_footer(text="♠️ BlackJack Casino | Choose your next action")
         await interaction.response.edit_message(embed=embed, view=view)
 
@@ -1768,8 +1921,12 @@ class CashOutModal(discord.ui.Modal):
                 await interaction.response.send_message("❌ Amount cannot be greater than current balance!", ephemeral=True)
                 return
             casino_data["balance"] -= amount
-            # Add amount to user's main balance (This part depends on how you manage user balances)
-            # For example: user_balance[interaction.user.id] += amount
+            
+            # Record cash out as a game
+            game_data = {"outcome": "cashout", "amount": amount, "timestamp": datetime.now().isoformat()}
+            casino_data["session_games"].append(game_data)
+            casino_data["games"].append(game_data)
+            
             view = CasinoView()
             view.play_game.disabled = False
             view.skip_game.disabled = False
@@ -1779,6 +1936,63 @@ class CashOutModal(discord.ui.Modal):
                 title="💵 Cash Out Successful!",
                 description=f"**Cashed out: ₹{amount:,}**\n\nAmount has been added to your main balance.",
                 color=0x00ff00
+            )
+            embed.add_field(name="💰 New Balance", value=f"₹{casino_data['balance']:,}", inline=True)
+            embed.add_field(name="🎮 Session Games", value=f"{len(casino_data['session_games'])}", inline=True)
+            embed.add_field(name="⏱️ Session Duration", value=f"{get_session_duration()}", inline=True)
+            embed.set_footer(text="♠️ BlackJack Casino")
+            await interaction.response.edit_message(embed=embed, view=view)
+        except ValueError:
+            await interaction.response.send_message("❌ Please enter a valid number for the amount!", ephemeral=True)
+
+class GameCashOutModal(discord.ui.Modal):
+    def __init__(self, bet_amount):
+        super().__init__(title="💵 Cash Out From Bet")
+        self.bet_amount = bet_amount
+        self.amount_input = discord.ui.TextInput(
+            label="Enter amount to cash out from bet", 
+            placeholder=f"Max: {bet_amount}", 
+            required=True, 
+            max_length=10
+        )
+        self.add_item(self.amount_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            cashout_amount = int(self.amount_input.value.replace('₹', '').replace(',', ''))
+            if cashout_amount <= 0:
+                await interaction.response.send_message("❌ Amount must be a positive number!", ephemeral=True)
+                return
+            if cashout_amount > self.bet_amount:
+                await interaction.response.send_message(f"❌ Cannot cash out more than bet amount (₹{self.bet_amount:,})!", ephemeral=True)
+                return
+            
+            # Add cashout amount back to balance
+            casino_data["balance"] += cashout_amount
+            
+            # Remaining amount is lost
+            remaining_amount = self.bet_amount - cashout_amount
+            
+            # Record as a special game outcome
+            game_data = {
+                "outcome": "cashout", 
+                "amount": cashout_amount, 
+                "lost_amount": remaining_amount,
+                "timestamp": datetime.now().isoformat()
+            }
+            casino_data["session_games"].append(game_data)
+            casino_data["games"].append(game_data)
+
+            view = CasinoView()
+            view.play_game.disabled = False
+            view.skip_game.disabled = False
+            view.end_session.disabled = False
+            view.cash_out.disabled = False
+
+            embed = discord.Embed(
+                title="💵 Partial Cash Out!",
+                description=f"**Cashed out: ₹{cashout_amount:,}**\n**Lost from bet: ₹{remaining_amount:,}**\n\nCashed amount added to balance.",
+                color=0x00aa00
             )
             embed.add_field(name="💰 New Balance", value=f"₹{casino_data['balance']:,}", inline=True)
             embed.add_field(name="🎮 Session Games", value=f"{len(casino_data['session_games'])}", inline=True)
@@ -1823,22 +2037,66 @@ class BalanceModal(discord.ui.Modal):
 
 class BetAmountModal(discord.ui.Modal):
     def __init__(self):
-        super().__init__(title="💰 Enter Bet Amount")
-        self.amount_input = discord.ui.TextInput(label="Enter your bet amount", placeholder="e.g., 100", required=True, max_length=10)
+        super().__init__(title="💰 Enter Bet Amount & Side Bets")
+        self.amount_input = discord.ui.TextInput(label="Main bet amount", placeholder="e.g., 100", required=True, max_length=10)
+        self.perfect_pair_input = discord.ui.TextInput(label="Perfect Pair side bet (optional)", placeholder="e.g., 20", required=False, max_length=10)
+        self.twentyone_plus_three_input = discord.ui.TextInput(label="21+3 side bet (optional)", placeholder="e.g., 15", required=False, max_length=10)
+        self.dealer_bust_input = discord.ui.TextInput(label="Dealer Bust side bet (optional)", placeholder="e.g., 10", required=False, max_length=10)
+        
         self.add_item(self.amount_input)
+        self.add_item(self.perfect_pair_input)
+        self.add_item(self.twentyone_plus_three_input)
+        self.add_item(self.dealer_bust_input)
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            amount = int(self.amount_input.value.replace('₹', '').replace(',', ''))
-            if amount <= 0:
-                await interaction.response.send_message("❌ Amount must be a positive number!", ephemeral=True)
+            main_amount = int(self.amount_input.value.replace('₹', '').replace(',', ''))
+            if main_amount <= 0:
+                await interaction.response.send_message("❌ Main bet amount must be a positive number!", ephemeral=True)
                 return
 
-            # Create game view with the bet amount
-            view = GameView(bet_amount=amount)
+            # Parse side bets
+            side_bets = {}
+            total_side_bet = 0
+            
+            if self.perfect_pair_input.value:
+                pp_amount = int(self.perfect_pair_input.value.replace('₹', '').replace(',', ''))
+                if pp_amount > 0:
+                    side_bets["Perfect Pair"] = pp_amount
+                    total_side_bet += pp_amount
+            
+            if self.twentyone_plus_three_input.value:
+                tpt_amount = int(self.twentyone_plus_three_input.value.replace('₹', '').replace(',', ''))
+                if tpt_amount > 0:
+                    side_bets["21 + 3"] = tpt_amount
+                    total_side_bet += tpt_amount
+            
+            if self.dealer_bust_input.value:
+                db_amount = int(self.dealer_bust_input.value.replace('₹', '').replace(',', ''))
+                if db_amount > 0:
+                    side_bets["Dealer Bust"] = db_amount
+                    total_side_bet += db_amount
+
+            # Check if user has enough balance for all bets
+            total_bet = main_amount + total_side_bet
+            if total_bet > casino_data["balance"]:
+                await interaction.response.send_message(f"❌ Insufficient balance! Total bet: ₹{total_bet:,}, Balance: ₹{casino_data['balance']:,}", ephemeral=True)
+                return
+
+            # Create game view with the bet amount and side bets
+            view = GameView(bet_amount=main_amount, side_bets=side_bets)
+            
+            description = f"**Choose your game outcome:**\n\n🟢 **WIN** - You won this round!\n🔴 **LOSE** - You lost this round!\n🟡 **TIE** - Push/Draw (no money change)\n🂡 **BLACKJACK** - Natural 21 (1.5x payout)\n💵 **CASH OUT** - Partial cash out from bet\n\n💰 **Main Bet:** ₹{main_amount:,}"
+            
+            if side_bets:
+                description += "\n\n**Side Bets:**"
+                for bet_type, bet_amount in side_bets.items():
+                    description += f"\n• {bet_type}: ₹{bet_amount:,}"
+                description += f"\n\n**Total Wagered:** ₹{total_bet:,}"
+            
             embed = discord.Embed(
                 title="🎲 BlackJack Game",
-                description=f"**Choose your game outcome:**\n\n🟢 **WIN** - You won this round!\n🔴 **LOSE** - You lost this round!\n🟡 **TIE** - Push/Draw (no money change)\n\n💰 **Bet Amount:** ₹{amount:,}",
+                description=description,
                 color=0xffd700
             )
             embed.add_field(name="💰 Current Balance", value=f"₹{casino_data['balance']:,}", inline=True)
@@ -1846,7 +2104,7 @@ class BetAmountModal(discord.ui.Modal):
             embed.set_footer(text="♠️ BlackJack Casino | Choose your outcome")
             await interaction.response.edit_message(embed=embed, view=view)
         except ValueError:
-            await interaction.response.send_message("❌ Please enter a valid number for the amount!", ephemeral=True)
+            await interaction.response.send_message("❌ Please enter valid numbers for bet amounts!", ephemeral=True)
 
 class SideBetAmountModal(discord.ui.Modal):
     def __init__(self, bet_type):
