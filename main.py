@@ -1351,7 +1351,7 @@ class CasinoView(discord.ui.View):
         view = GameView()
         embed = discord.Embed(
             title="🎲 BlackJack Game",
-            description="**Choose your game outcome:**\n\n🟢 **WIN** - You won this round!\n🔴 **LOSE** - You lost this round!",
+            description="**Choose your game outcome:**\n\n🟢 **WIN** - You won this round!\n🔴 **LOSE** - You lost this round!\n🟡 **TIE** - Push/Draw (no money change)",
             color=0xffd700
         )
         embed.add_field(name="💰 Current Balance", value=f"₹{casino_data['balance']:,}", inline=True)
@@ -1403,7 +1403,8 @@ class CasinoView(discord.ui.View):
         # Calculate comprehensive statistics
         total_games = len(session_games)
         wins = sum(1 for game in session_games if game["outcome"] == "win")
-        losses = total_games - wins
+        losses = sum(1 for game in session_games if game["outcome"] == "lose")
+        ties = sum(1 for game in session_games if game["outcome"] == "tie")
         win_rate = (wins / total_games) * 100 if total_games > 0 else 0
         total_bet = sum(game["amount"] for game in session_games)
         total_won = sum(game["amount"] for game in session_games if game["outcome"] == "win")
@@ -1427,10 +1428,11 @@ class CasinoView(discord.ui.View):
                 temp_win_streak += 1
                 temp_loss_streak = 0
                 max_win_streak = max(max_win_streak, temp_win_streak)
-            else:
+            elif game["outcome"] == "lose":
                 temp_loss_streak += 1
                 temp_win_streak = 0
                 max_loss_streak = max(max_loss_streak, temp_loss_streak)
+            # Ties don't break streaks, they just continue them
 
         # Generate chart with error handling
         chart_file = None
@@ -1458,7 +1460,7 @@ class CasinoView(discord.ui.View):
         # Performance Statistics
         embed.add_field(
             name="🎯 Performance Stats",
-            value=f"**Wins:** {wins} 🟢\n**Losses:** {losses} 🔴\n**Win Rate:** {win_rate:.1f}%\n**Avg Bet:** ₹{avg_bet:.2f}",
+            value=f"**Wins:** {wins} 🟢\n**Losses:** {losses} 🔴\n**Ties:** {ties} 🟡\n**Win Rate:** {win_rate:.1f}%\n**Avg Bet:** ₹{avg_bet:.2f}",
             inline=True
         )
 
@@ -1479,7 +1481,7 @@ class CasinoView(discord.ui.View):
         # Streak Analysis
         embed.add_field(
             name="🔥 Streak Analysis",
-            value=f"**Max Win Streak:** {max_win_streak} games\n**Max Loss Streak:** {max_loss_streak} games\n**Current Form:** {'🟢 Winning' if session_games[-1]['outcome'] == 'win' else '🔴 Losing' if session_games else 'N/A'}",
+            value=f"**Max Win Streak:** {max_win_streak} games\n**Max Loss Streak:** {max_loss_streak} games\n**Current Form:** {'🟢 Winning' if session_games[-1]['outcome'] == 'win' else ('🔴 Losing' if session_games[-1]['outcome'] == 'lose' else '🟡 Push') if session_games else 'N/A'}",
             inline=True
         )
 
@@ -1488,7 +1490,12 @@ class CasinoView(discord.ui.View):
         recent_text = ""
         for i, g in enumerate(recent_games):
             game_num = len(session_games) - len(recent_games) + i + 1
-            recent_text += f"`Game {game_num}:` {'🟢 WIN' if g['outcome'] == 'win' else '🔴 LOSE'} ₹{g['amount']:,}\n"
+            if g['outcome'] == 'win':
+                recent_text += f"`Game {game_num}:` 🟢 WIN ₹{g['amount']:,}\n"
+            elif g['outcome'] == 'lose':
+                recent_text += f"`Game {game_num}:` 🔴 LOSE ₹{g['amount']:,}\n"
+            else:  # tie
+                recent_text += f"`Game {game_num}:` 🟡 TIE (Push)\n"
 
         embed.add_field(
             name="🎮 Recent Game History (Last 10)",
@@ -1554,10 +1561,10 @@ class CasinoView(discord.ui.View):
 
             # Prepare data
             game_numbers = list(range(1, len(games) + 1))
-            outcomes = [1 if g["outcome"] == "win" else -1 for g in games]
+            outcomes = [1 if g["outcome"] == "win" else (-1 if g["outcome"] == "lose" else 0) for g in games]
             amounts = [g["amount"] for g in games]
-            running_profit = [sum(g["amount"] * (1 if g["outcome"] == "win" else -1) for g in games[:i+1]) for i in range(len(games))]
-            colors = ['#00ff41' if o == 1 else '#ff4757' for o in outcomes]
+            running_profit = [sum(g["amount"] * (1 if g["outcome"] == "win" else (-1 if g["outcome"] == "lose" else 0)) for g in games[:i+1]) for i in range(len(games))]
+            colors = ['#00ff41' if o == 1 else ('#ff4757' if o == -1 else '#ffaa00') for o in outcomes]
 
             # Top chart - Bet amounts and outcomes
             ax1.set_facecolor('#36393f')
@@ -1590,10 +1597,12 @@ class CasinoView(discord.ui.View):
             # Add statistics text box
             total_games = len(games)
             wins = sum(1 for g in games if g["outcome"] == "win")
+            losses = sum(1 for g in games if g["outcome"] == "lose")
+            ties = sum(1 for g in games if g["outcome"] == "tie")
             win_rate = (wins / total_games) * 100 if total_games > 0 else 0
             final_profit = running_profit[-1] if running_profit else 0
 
-            stats_text = f'📊 Session Stats:\nGames: {total_games} | Wins: {wins} | Win Rate: {win_rate:.1f}%\nFinal P&L: ₹{final_profit:+,}'
+            stats_text = f'📊 Session Stats:\nGames: {total_games} | W: {wins} | L: {losses} | T: {ties} | Win Rate: {win_rate:.1f}%\nFinal P&L: ₹{final_profit:+,}'
             ax2.text(0.02, 0.98, stats_text, transform=ax2.transAxes, fontsize=10,
                     verticalalignment='top', bbox=dict(boxstyle='round', facecolor='#36393f', alpha=0.8),
                     color='white')
@@ -1633,6 +1642,35 @@ class GameView(discord.ui.View):
     @discord.ui.button(label='🔴 LOSE', style=discord.ButtonStyle.danger, custom_id='game_lose')
     async def game_lose(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(AmountModal(outcome="lose"))
+
+    @discord.ui.button(label='🟡 TIE', style=discord.ButtonStyle.secondary, custom_id='game_tie')
+    async def game_tie(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Record tie game with amount as 0 and no balance change
+        game_data = {"outcome": "tie", "amount": 0, "timestamp": datetime.now().isoformat()}
+        casino_data["session_games"].append(game_data)
+        casino_data["games"].append(game_data)
+        
+        # No balance change for tie
+        
+        view = CasinoView()
+        view.play_game.disabled = False
+        view.skip_game.disabled = False
+        view.end_session.disabled = False
+
+        embed = discord.Embed(
+            title="🎰 BlackJack Casino - Game Recorded!",
+            description=f"**🟡 TIE**\n\n**No money gained or lost**\n**Balance Change:** No change",
+            color=0xffaa00
+        )
+        embed.add_field(name="💰 Current Balance", value=f"₹{casino_data['balance']:,}", inline=True)
+        embed.add_field(name="🎮 Session Games", value=f"{len(casino_data['session_games'])}", inline=True)
+        embed.add_field(name="⏱️ Session Duration", value=f"{get_session_duration()}", inline=True)
+        wins = sum(1 for g in casino_data['session_games'] if g['outcome'] == 'win')
+        losses = sum(1 for g in casino_data['session_games'] if g['outcome'] == 'lose')
+        ties = sum(1 for g in casino_data['session_games'] if g['outcome'] == 'tie')
+        embed.add_field(name="📊 Session Stats", value=f"Wins: {wins} | Losses: {losses} | Ties: {ties}", inline=False)
+        embed.set_footer(text="♠️ BlackJack Casino | Choose your next action")
+        await interaction.response.edit_message(embed=embed, view=view)
 
 class BalanceModal(discord.ui.Modal):
     def __init__(self, action="start"):
