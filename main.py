@@ -160,7 +160,7 @@ def get_session_duration():
 
 class CasinoView(discord.ui.View):
     def __init__(self):
-        # Set timeout to None to make the view persistent for long sessions (up to 4+ hours)
+        # Set timeout to None to make the view truly persistent for unlimited session duration
         super().__init__(timeout=None)
 
     @discord.ui.button(label='💰 Start Session', style=discord.ButtonStyle.green, custom_id='start_session')
@@ -540,6 +540,7 @@ class CasinoView(discord.ui.View):
 
 class GameView(discord.ui.View):
     def __init__(self, bet_amount, side_bets=None, is_split=False, is_double=False):
+        # Set timeout to None for unlimited session duration
         super().__init__(timeout=None)
         self.bet_amount = bet_amount
         self.side_bets = side_bets or {}
